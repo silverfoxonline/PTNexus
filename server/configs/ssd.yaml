@@ -7,6 +7,7 @@ form_fields:
   resolution: "standard_sel"
   video_codec: "codec_sel"
   audio_codec: "audiocodec_sel"
+  team: "team_sel"
 
 source_parsers:
   source_params:
@@ -136,3 +137,89 @@ source_parsers:
       "Blu-ray": "tag.Blu-ray"
       "LIVE现场": "tag.LIVE现场"
       "default": null
+
+mappings:
+  type:
+    "category.movie": "401"
+    "category.tv_series": "402"
+    "category.documentaries": "403"
+    "category.tv_shows": "404"
+    "category.sports": "405"
+    "category.mv": "406"
+    "category.music": "407"
+    "category.audiobook": "408"
+    "category.other": "409"
+    "default": "401"
+
+  source:
+    "source.china": "1"
+    "source.hongkong": "2"
+    "source.taiwan": "3"
+    "source.western": "4"
+    "source.japan": "5"
+    "source.korea": "6"
+    "source.india": "7"
+    "source.russia": "8"
+    "source.thailand": "9"
+    "source.other": "10"
+    "default": "10"
+
+  medium:
+    "medium.bluray": "1"
+    "medium.remux": "2"
+    "medium.minibd": "3"
+    "medium.bdrip": "4"
+    "medium.webdl": "5"
+    "medium.webrip": "6"
+    "medium.hdtv": "7"
+    "medium.tvrip": "8"
+    "medium.dvd": "9"
+    "medium.dvdrip": "10"
+    "medium.cd": "11"
+    "medium.other": "12"
+    "default": "12"
+
+  video_codec:
+    "video.h265": "1"
+    "video.h264": "2"
+    "video.vc1": "3"
+    "video.mpeg2": "4"
+    "video.av1": "5"
+    "video.other": "6"
+    "default": "6"
+
+  audio_codec:
+    "audio.dts_hd": "1"
+    "audio.truehd": "2"
+    "audio.lpcm": "3"
+    "audio.dts": "4"
+    "audio.ddp": "5"
+    "audio.eac3": "5"
+    "audio.ac3": "6"
+    "audio.aac": "7"
+    "audio.flac": "8"
+    "audio.ape": "9"
+    "audio.wav": "10"
+    "audio.mp3": "11"
+    "audio.opus": "12"
+    "audio.other": "13"
+    "default": "13"
+
+  resolution:
+    "resolution.r2160p": "5"
+    "resolution.r1080p": "1"
+    "resolution.r1080i": "2"
+    "resolution.r720p": "3"
+    "resolution.sd": "4"
+    "resolution.other": "6"
+    "default": "6"
+
+  team:
+    "team.cmct": "1"
+    "team.wiki": "2"
+    "team.mteam": "3"
+    "team.douhd": "4"
+    "team.hone": "5"
+    "team.byndr": "6"
+    "team.hhweb": "7"
+    "default": "1"
