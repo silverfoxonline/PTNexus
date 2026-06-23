@@ -49,9 +49,21 @@ func PublishTorrentToTarget(
 
 	title := resolvePublishMainTitle(siteCode, uploadData, torrentPath)
 	subtitle := strings.TrimSpace(toStringAny(uploadData["subtitle"], ""))
-	description := publishuploader.BuildUploadDescription(siteCode, uploadData)
 	imdbLink, doubanLink := resolvePublishExternalLinks(uploadData)
 	mediainfo := strings.TrimSpace(toStringAny(uploadData["mediainfo"], ""))
+	prepared, prepareErr := preparePublishMediaForTarget(uploadData, payload, torrentPath, savePath, downloaderID, mediainfo)
+	if prepareErr != nil {
+		appendLog(fmt.Sprintf("发布前媒体处理失败: %v", prepareErr))
+		appendLog("--- [步骤2] 任务执行完毕 ---")
+		return "", "", strings.Join(logLines, "\n"), false, nil, prepareErr
+	}
+	for _, line := range prepared.Logs {
+		appendLog(line)
+	}
+	if strings.TrimSpace(prepared.MediaInfo) != "" {
+		mediainfo = strings.TrimSpace(prepared.MediaInfo)
+	}
+	description := publishuploader.BuildUploadDescription(siteCode, uploadData)
 
 	pubInput := publishpublisher.PublishInput{
 		TargetName: targetName,
