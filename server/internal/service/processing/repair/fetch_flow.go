@@ -1,6 +1,7 @@
 package repair
 
 import (
+	neturl "net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -585,8 +586,9 @@ func repairScreenshotsDuringFetch(
 	validURLs := filterReachableImageURLsConcurrently(rawURLs, fetchScreenshotValidateWorker)
 	logx.Infof(fetchRepairScreenshotLogModule, "截图并发校验结束 raw_count=%d valid_count=%d elapsed_ms=%d", len(rawURLs), len(validURLs), time.Since(validateStartedAt).Milliseconds())
 
-	if len(validURLs) >= fetchMinValidScreenshots {
-		reviewData.Screens = ToBBCodeImages(validURLs)
+	whitelistedPNGURLs := normalizeFetchWhitelistedPNGURLs(validURLs)
+	if len(whitelistedPNGURLs) >= fetchMinValidScreenshots {
+		reviewData.Screens = ToBBCodeImages(whitelistedPNGURLs)
 		logx.Infof(fetchRepairScreenshotLogModule, "截图校验通过 valid_count=%d", len(validURLs))
 		emitLog(deps, taskID, "修复截图", "截图校验通过", "success")
 		return reviewStatus, previewRequired
@@ -615,8 +617,8 @@ func repairScreenshotsDuringFetch(
 		reviewStatus = processingshared.ScreenshotReviewStatusPending
 		if mode == processingshared.ScreenshotReviewModeInteractive {
 			previewRequired = true
-			if len(validURLs) > 0 {
-				reviewData.Screens = ToBBCodeImages(validURLs)
+			if len(whitelistedPNGURLs) > 0 {
+				reviewData.Screens = ToBBCodeImages(whitelistedPNGURLs)
 			} else {
 				reviewData.Screens = ""
 			}
@@ -644,8 +646,8 @@ func repairScreenshotsDuringFetch(
 		return reviewStatus, previewRequired
 	}
 
-	if len(validURLs) > 0 {
-		reviewData.Screens = ToBBCodeImages(validURLs)
+	if len(whitelistedPNGURLs) > 0 {
+		reviewData.Screens = ToBBCodeImages(whitelistedPNGURLs)
 		logx.Warnf(fetchRepairScreenshotLogModule, "截图自动重建失败，回退保留可用截图 valid_count=%d err=%v", len(validURLs), err)
 		emitLog(deps, taskID, "修复截图", "截图重建失败，已回退保留可用截图", "warning")
 		return processingshared.ScreenshotReviewStatusNone, false
@@ -654,6 +656,58 @@ func repairScreenshotsDuringFetch(
 	logx.Warnf(fetchRepairScreenshotLogModule, "截图自动重建失败且无可用回退截图 err=%v", err)
 	emitLog(deps, taskID, "修复截图", "截图自动重建失败，未获得可用截图", "warning")
 	return processingshared.ScreenshotReviewStatusNone, false
+}
+
+func normalizeFetchWhitelistedPNGURLs(urls []string) []string {
+	out := make([]string, 0, len(urls))
+	for _, raw := range urls {
+		url := normalizeFetchWhitelistedPNGURL(raw)
+		if url == "" {
+			continue
+		}
+		exists := false
+		for _, item := range out {
+			if item == url {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			out = append(out, url)
+		}
+	}
+	return out
+}
+
+func normalizeFetchWhitelistedPNGURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if direct := PixhostShowToDirectURL(trimmed); strings.TrimSpace(direct) != "" {
+		trimmed = strings.TrimSpace(direct)
+	} else if direct := NormalizePixhostDirectHost(trimmed); strings.TrimSpace(direct) != "" {
+		trimmed = strings.TrimSpace(direct)
+	}
+	parsed, err := neturl.Parse(trimmed)
+	if err != nil || parsed == nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	path := strings.ToLower(strings.TrimSpace(parsed.Path))
+	if !strings.HasSuffix(path, ".png") {
+		return ""
+	}
+	switch {
+	case host == "pixhost.to" || strings.HasSuffix(host, ".pixhost.to"):
+		return trimmed
+	case host == "imgbox.com" || strings.HasSuffix(host, ".imgbox.com"):
+		return trimmed
+	case host == "gifyu.com" || strings.HasSuffix(host, ".gifyu.com"):
+		return trimmed
+	default:
+		return ""
+	}
 }
 
 func filterReachableImageURLsConcurrently(urls []string, workers int) []string {

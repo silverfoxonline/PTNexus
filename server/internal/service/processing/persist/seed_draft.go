@@ -126,7 +126,7 @@ func (d *SeedDraft) ApplyReviewExtract(review parser.ReviewExtractedData, detail
 	if subtitle == "" {
 		subtitle = strings.TrimSpace(processingrepair.ExtractDoubanSummary(detailHTML))
 	}
-	d.Subtitle = subtitle
+	d.Subtitle = NormalizeSeedSubtitle(subtitle)
 }
 
 // ApplyRepairResult 将“抓取修复”阶段（海报/简介/截图修复）的产物写回草稿。
@@ -177,6 +177,16 @@ func (d *SeedDraft) CompleteAndMapTags(siteIdentifier string, formatIsBDInfo boo
 	if d == nil {
 		return []string{}
 	}
+
+	{
+		descriptionForTags := strings.TrimSpace(strings.Join([]string{d.Statement, d.Body}, "\n"))
+		if processingtagging.CheckAnimationTypeFromDescription(descriptionForTags) {
+			d.Type = "category.animation"
+		}
+	}
+	d.EpisodeTagReason = ""
+	d.Tags = NormalizeSeedTagsForReview(nil)
+	return []string{}
 
 	descriptionForTags := strings.TrimSpace(strings.Join([]string{d.Statement, d.Body}, "\n"))
 	rawTagCandidates := make([]string, 0, len(d.RawTags)+16)
@@ -277,7 +287,7 @@ func (d *SeedDraft) ToSeedParameterRecord() map[string]any {
 		"nickname":                  strings.TrimSpace(d.Nickname),
 		"name":                      strings.TrimSpace(d.Name),
 		"title":                     strings.TrimSpace(d.Title),
-		"subtitle":                  strings.TrimSpace(d.Subtitle),
+		"subtitle":                  NormalizeSeedSubtitle(d.Subtitle),
 		"imdb_link":                 strings.TrimSpace(d.IMDbLink),
 		"douban_link":               strings.TrimSpace(d.DoubanLink),
 		"tmdb_link":                 strings.TrimSpace(d.TMDbLink),

@@ -107,19 +107,13 @@ func normalizeSSDMediaInfo(text string) string {
 
 func buildSSDDescription(uploadData map[string]any) string {
 	intro, _ := uploadData["intro"].(map[string]any)
-	parts := make([]string, 0, 3)
-	for _, key := range []string{"statement", "body"} {
-		if section := strings.TrimSpace(resolveUploadSection(uploadData, key)); section != "" {
-			parts = append(parts, section)
-			continue
-		}
-		if intro != nil {
-			if section := strings.TrimSpace(toStringAny(intro[key], "")); section != "" {
-				parts = append(parts, section)
-			}
-		}
+	if statement := strings.TrimSpace(resolveUploadSection(uploadData, "statement")); statement != "" {
+		return statement
 	}
-	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+	if intro != nil {
+		return strings.TrimSpace(toStringAny(intro["statement"], ""))
+	}
+	return ""
 }
 
 func applySSDTagCheckboxes(uploadData map[string]any, formFields map[string]string) {

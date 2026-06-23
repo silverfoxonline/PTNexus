@@ -30,7 +30,7 @@ func NormalizeSeedRow(row map[string]any) map[string]any {
 	item["title"] = title
 	item["name"] = name
 
-	item["subtitle"] = toStringWithFallback(item["subtitle"], "")
+	item["subtitle"] = NormalizeSeedSubtitle(toStringWithFallback(item["subtitle"], ""))
 	item["imdb_link"] = toStringWithFallback(item["imdb_link"], "")
 	item["douban_link"] = toStringWithFallback(item["douban_link"], "")
 	item["tmdb_link"] = toStringWithFallback(item["tmdb_link"], "")
@@ -46,7 +46,7 @@ func NormalizeSeedRow(row map[string]any) map[string]any {
 	item["final_publish_parameters"] = ParseStringMap(item["final_publish_parameters"])
 	item["complete_publish_params"] = ParseStringMap(item["complete_publish_params"])
 	item["raw_params_for_preview"] = ParseStringMap(item["raw_params_for_preview"])
-	item["tags"] = ParseStringArray(item["tags"])
+	item["tags"] = NormalizeSeedTagsForReview(item["tags"])
 
 	titleComponents := processingtitle.CompleteTitleComponents(ParseAnyArray(item["title_components"]), title)
 	item["title_components"] = titleComponents
