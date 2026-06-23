@@ -133,7 +133,7 @@ func resolvePublishMainTitle(siteCode string, uploadData map[string]any, torrent
 		baseTitle = strings.TrimSpace(toStringAny(uploadData["name"], filepath.Base(torrentPath)))
 	}
 	if !strings.EqualFold(strings.TrimSpace(siteCode), "qingwapt") {
-		return baseTitle
+		return normalizePublishTitleForSite(siteCode, baseTitle)
 	}
 
 	titleComponents := parsePublishTitleComponents(uploadData["title_components"])
@@ -145,9 +145,20 @@ func resolvePublishMainTitle(siteCode string, uploadData map[string]any, torrent
 	filtered := filterPublishTitleComponents(completed, "色深")
 	rebuilt := strings.TrimSpace(processingtitle.BuildPreviewTitleFromTitleComponents(filtered, baseTitle))
 	if rebuilt == "" || rebuilt == "-NOGROUP" {
-		return stripPublishTitleBitDepth(baseTitle)
+		return normalizePublishTitleForSite(siteCode, stripPublishTitleBitDepth(baseTitle))
 	}
-	return rebuilt
+	return normalizePublishTitleForSite(siteCode, rebuilt)
+}
+
+func normalizePublishTitleForSite(siteCode string, title string) string {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(siteCode), "ssd") {
+		return trimmed
+	}
+	return strings.Trim(strings.Join(strings.Fields(trimmed), "."), ".")
 }
 
 // parsePublishTitleComponents 将发布 payload 中的 title_components 统一转换为 []any。

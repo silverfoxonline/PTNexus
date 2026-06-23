@@ -27,6 +27,7 @@ var (
 	rePixhostOgImage            = regexp.MustCompile(`(?is)<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']`)
 	rePixhostImageTag           = regexp.MustCompile(`(?is)<img[^>]+id=["']image["'][^>]*src=["']([^"']+)["']`)
 	rePixhostThumbSuffix        = regexp.MustCompile(`_[^.]{1,3}\.(jpg|jpeg|png|gif|webp)$`)
+	rePixhostNumericThumbPrefix = regexp.MustCompile(`^\d+_(.+\.(?:jpg|jpeg|png|gif|webp))$`)
 	rePixhostDirectURL          = regexp.MustCompile(`^https://img[12]\.pixhost\.to/images/\d+/[^/]+\.(jpg|jpeg|png|gif|webp)$`)
 	posterTransferProxyPrefixes = []string{
 		"http://pt-nexus-proxy.sqing33.dpdns.org/",
@@ -548,18 +549,26 @@ func PixhostShowToDirectURL(showURL string) string {
 		return direct
 	}
 	if match := rePixhostDirect.FindStringSubmatch(direct); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], match[2])
+		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
 		if rePixhostDirectURL.MatchString(candidate) {
 			return candidate
 		}
 	}
 	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], match[2])
+		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
 		if rePixhostDirectURL.MatchString(candidate) {
 			return candidate
 		}
 	}
 	return ""
+}
+
+func normalizePixhostImageFilename(filename string) string {
+	trimmed := strings.TrimSpace(filename)
+	if match := rePixhostNumericThumbPrefix.FindStringSubmatch(trimmed); len(match) >= 2 {
+		return strings.TrimSpace(match[1])
+	}
+	return trimmed
 }
 
 // NormalizePixhostDirectHost 规范化 Pixhost 直链域名到 img*.pixhost.to。
@@ -585,7 +594,7 @@ func NormalizePixhostDirectHost(value string) string {
 		return parsed.String()
 	}
 	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		return fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], match[2])
+		return fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
 	}
 	return ""
 }

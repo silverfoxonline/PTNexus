@@ -37,7 +37,6 @@ func AddToDownloader(payload map[string]any, rootConfig map[string]any, repo Add
 		return map[string]any{"success": false, "message": err.Error()}, 400
 	}
 
-	manualTags := processingpersist.ParseStringArray(payload["tags"])
 	siteNicknameHint := strings.TrimSpace(processingshared.ToString(payload["siteNickname"], processingshared.ToString(payload["site_nickname"], "")))
 	addOptions := downloaderclient.AddTorrentOptions{Paused: false}
 	detailSite := map[string]any{}
@@ -65,7 +64,7 @@ func AddToDownloader(payload map[string]any, rootConfig map[string]any, repo Add
 		resolvedSiteNickname = strings.TrimSpace(processingshared.ToString(detailSite["nickname"], ""))
 	}
 	configuredTags, configuredCategory := resolveConfiguredTagsAndCategory(rootConfig, resolvedSiteNickname)
-	addOptions.Tags = mergeTagLists(manualTags, configuredTags)
+	addOptions.Tags = mergeTagLists(configuredTags)
 	if downloader.Type == "transmission" && configuredCategory != "" {
 		addOptions.Tags = appendUniqueTag(addOptions.Tags, configuredCategory)
 	}

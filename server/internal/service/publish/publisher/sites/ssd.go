@@ -18,6 +18,7 @@ import (
 const ssdPublishLogModule = "publish-ssd"
 
 var reSSDEpisodeOne = regexp.MustCompile(`(?i)(?:^|[ ._\-\[\(])(?:s\d{1,2})?e0?1(?:[ ._\-\]\)]|$)`)
+var reSSDMediaInfoExtraBlankLine = regexp.MustCompile(`(?m)^((?:General|Video|Audio|Text(?:\s*#\d+)?|Menu|Chapters))\r?\n\s*\r?\n`)
 
 type ssdPublisher struct {
 	publicSiteDefaults
@@ -32,11 +33,11 @@ func (ssdPublisher) LogModule() string {
 }
 
 func (ssdPublisher) AttemptPrefix(input publisher.PublishInput) string {
-	return "Detected CMCT target: using PNG whitelist screenshots, empty intro body, and E01 MediaInfo for series when available."
+	return "Detected CMCT target: using direct PNG screenshot URLs, preserved extra description, and refreshed MediaInfo when available."
 }
 
 func (ssdPublisher) BuildDescription(input publisher.PublishInput) string {
-	return ""
+	return buildSSDDescription(input.UploadData)
 }
 
 func (ssdPublisher) BuildExtraFormFields(input publisher.PublishInput) (map[string]string, error) {
@@ -72,8 +73,8 @@ func (ssdPublisher) BuildExtraFormFields(input publisher.PublishInput) (map[stri
 		resolveFieldName("imdb_url", "url"):              infoURL,
 		resolveFieldName("screenshots", "url_vimages"): strings.Join(screenshotURLs, "\n"),
 	}
-	if mediaInfo, mediaErr := resolveSSDEpisodeOneMediaInfo(input); mediaErr == nil && strings.TrimSpace(mediaInfo) != "" {
-		extra[resolveFieldName("technical_info", "technical_info")] = strings.TrimSpace(mediaInfo)
+	if mediaInfo, mediaErr := resolveSSDMediaInfo(input); mediaErr == nil && strings.TrimSpace(mediaInfo) != "" {
+		extra[resolveFieldName("technical_info", "technical_info")] = normalizeSSDMediaInfo(mediaInfo)
 	}
 	return extra, nil
 }
@@ -83,11 +84,66 @@ func (ssdPublisher) AdjustFormFields(input publisher.PublishInput, formFields ma
 		return
 	}
 	delete(formFields, "dburl")
+	delete(formFields, "team_sel")
+	removeFormFieldsByPrefix(formFields, "tags[")
+	applySSDTagCheckboxes(input.UploadData, formFields)
+	if mediaInfo := strings.TrimSpace(formFields["Media_BDInfo"]); mediaInfo != "" {
+		formFields["Media_BDInfo"] = normalizeSSDMediaInfo(mediaInfo)
+	}
 	for _, key := range []string{"descr", "description"} {
 		if _, exists := formFields[key]; exists {
 			formFields[key] = strings.TrimSpace(formFields[key])
 		}
 	}
+}
+
+func normalizeSSDMediaInfo(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.TrimSpace(reSSDMediaInfoExtraBlankLine.ReplaceAllString(trimmed, "$1\n"))
+}
+
+func buildSSDDescription(uploadData map[string]any) string {
+	intro, _ := uploadData["intro"].(map[string]any)
+	parts := make([]string, 0, 3)
+	for _, key := range []string{"statement", "body"} {
+		if section := strings.TrimSpace(resolveUploadSection(uploadData, key)); section != "" {
+			parts = append(parts, section)
+			continue
+		}
+		if intro != nil {
+			if section := strings.TrimSpace(toStringAny(intro[key], "")); section != "" {
+				parts = append(parts, section)
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+}
+
+func applySSDTagCheckboxes(uploadData map[string]any, formFields map[string]string) {
+	tags := resolveSiteCombinedTags(uploadData)
+	setIfAnyTag := func(field string, candidates ...string) {
+		if hasAnySiteTagLower(tags, candidates...) {
+			formFields[field] = "1"
+		}
+	}
+	setIfAnyTag("animation", "tag.动画", "动画")
+	setIfAnyTag("exclusive", "tag.禁转", "禁转")
+	setIfAnyTag("pack", "tag.合集", "tag.完结", "合集", "完结")
+	setIfAnyTag("untouched", "tag.原生", "原生")
+	setIfAnyTag("mandarin", "tag.国配", "tag.国语", "国配", "国语")
+	setIfAnyTag("subtitlezh", "tag.中字", "中字")
+	setIfAnyTag("subtitlesp", "tag.特效", "特效", "特效字幕")
+	setIfAnyTag("selfcompile", "tag.自译", "自译")
+	setIfAnyTag("dovi", "tag.杜比", "tag.Dolby Vision", "DoVi", "Dolby Vision", "杜比")
+	setIfAnyTag("hdr10", "tag.HDR", "tag.HDR10", "HDR", "HDR10")
+	setIfAnyTag("hdr10plus", "tag.HDR10+", "HDR10+")
+	setIfAnyTag("hdrvivid", "tag.菁彩HDR", "菁彩HDR")
+	setIfAnyTag("hlg", "tag.HLG", "HLG")
+	setIfAnyTag("cc", "tag.cc", "CC")
+	setIfAnyTag("3d", "tag.3d", "3D")
 }
 
 func resolveSSDScreenshotURLs(input publisher.PublishInput) ([]string, error) {
@@ -195,13 +251,11 @@ func normalizeSSDImageURL(raw string) string {
 	}
 }
 
-func resolveSSDEpisodeOneMediaInfo(input publisher.PublishInput) (string, error) {
-	if !isSSDSeries(input) {
-		return "", nil
-	}
+func resolveSSDMediaInfo(input publisher.PublishInput) (string, error) {
+	fallback := strings.TrimSpace(input.MediaInfo)
 	savePath := strings.TrimSpace(input.SavePath)
 	if savePath == "" {
-		return "", fmt.Errorf("missing save path")
+		return fallback, fmt.Errorf("missing save path")
 	}
 	torrentName := strings.TrimSpace(payloadString(input.Payload, "torrentName", "torrent_name", "name"))
 	if torrentName == "" {
@@ -210,18 +264,37 @@ func resolveSSDEpisodeOneMediaInfo(input publisher.PublishInput) (string, error)
 			toStringAny(input.UploadData["title"], ""),
 		))
 	}
-	episodePath, err := findSSDEpisodeOnePath(savePath, torrentName)
-	if err != nil {
-		return "", err
+	if isSSDSeries(input) {
+		episodePath, err := findSSDEpisodeOnePath(savePath, torrentName)
+		if err != nil {
+			return fallback, err
+		}
+		return extractSSDMediaInfoFromPath(episodePath, "CMCT E01 MediaInfo", fallback)
 	}
-	target, err := processingmedia.ResolveMediaTargetForPath(episodePath, "CMCT E01 MediaInfo")
+	target, err := processingmedia.ResolveMediaTargetByCandidates(savePath, torrentName, strings.TrimSpace(input.ContentName), "CMCT MediaInfo")
 	if err != nil {
-		return "", err
+		return fallback, err
 	}
 	defer target.Close()
-	return processingmedia.ExtractMediaInfo(target.TargetFile)
+	mediaInfo, err := processingmedia.ExtractMediaInfo(target.TargetFile)
+	if err != nil || strings.TrimSpace(mediaInfo) == "" {
+		return fallback, err
+	}
+	return mediaInfo, nil
 }
 
+func extractSSDMediaInfoFromPath(path string, scene string, fallback string) (string, error) {
+	target, err := processingmedia.ResolveMediaTargetForPath(path, scene)
+	if err != nil {
+		return strings.TrimSpace(fallback), err
+	}
+	defer target.Close()
+	mediaInfo, err := processingmedia.ExtractMediaInfo(target.TargetFile)
+	if err != nil || strings.TrimSpace(mediaInfo) == "" {
+		return strings.TrimSpace(fallback), err
+	}
+	return mediaInfo, nil
+}
 func isSSDSeries(input publisher.PublishInput) bool {
 	values := []string{
 		strings.TrimSpace(input.Title),
