@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	publishworkflow "github.com/pt-nexus/server/internal/service/publish/workflow"
 )
 
 func (h *Handler) PublishBatchStream(c *gin.Context) {
@@ -29,6 +30,13 @@ func (h *Handler) PublishBatchStream(c *gin.Context) {
 		"connectedAt": time.Now().Format("2006-01-02 15:04:05"),
 	}) {
 		return
+	}
+	if statusPayload, statusCode := h.service.PublishBatchStatus(batchID); statusCode == http.StatusOK {
+		if task, ok := statusPayload["task"].(publishworkflow.BatchTask); ok {
+			if !replayPublishBatchSnapshot(c, task) {
+				return
+			}
+		}
 	}
 
 	heartbeatTicker := time.NewTicker(15 * time.Second)
@@ -55,4 +63,20 @@ func (h *Handler) PublishBatchStream(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func replayPublishBatchSnapshot(c *gin.Context, task publishworkflow.BatchTask) bool {
+	for siteName, result := range task.Results {
+		if !writeSSEEvent(c, map[string]any{
+			"type":     "site_finished",
+			"siteName": siteName,
+			"result":   result,
+		}) {
+			return false
+		}
+	}
+	if !task.IsRunning {
+		return writeSSEEvent(c, map[string]any{"type": "batch_finished"})
+	}
+	return true
 }
