@@ -8,6 +8,7 @@ form_fields:
   video_codec: "codec_sel"
   audio_codec: "audiocodec_sel"
   team: "team_sel"
+  technical_info: "Media_BDInfo"
 
 source_parsers:
   source_params:
