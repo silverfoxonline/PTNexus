@@ -24,8 +24,11 @@ var publishTitleBitDepthPattern = regexp.MustCompile(`(?i)\b(?:8|10|12|16|24)bit
 func PublishTorrentToTarget(
 	targetInfo map[string]any,
 	uploadData map[string]any,
+	payload map[string]any,
 	torrentPath string,
 	sourceSiteNickname string,
+	savePath string,
+	downloaderID string,
 	findSiteNicknameByGroup func(releaseGroup string) (string, error),
 ) (string, string, string, bool, map[string]string, error) {
 	targetName := strings.TrimSpace(toStringAny(targetInfo["nickname"], toStringAny(targetInfo["site"], "目标站点")))
@@ -58,6 +61,7 @@ func PublishTorrentToTarget(
 		TargetInfo: targetInfo,
 
 		UploadData:  uploadData,
+		Payload:     payload,
 		TorrentPath: strings.TrimSpace(torrentPath),
 
 		Title:       title,
@@ -66,6 +70,12 @@ func PublishTorrentToTarget(
 		IMDbLink:    imdbLink,
 		DoubanLink:  doubanLink,
 		MediaInfo:   mediainfo,
+		SavePath:    strings.TrimSpace(savePath),
+		DownloaderID: strings.TrimSpace(downloaderID),
+		ContentName: strings.TrimSpace(firstNonEmpty(
+			toStringAny(uploadData["content_name"], ""),
+			toStringAny(uploadData["contentName"], ""),
+		)),
 
 		SourceSiteNickname:      strings.TrimSpace(sourceSiteNickname),
 		FindSiteNicknameByGroup: findSiteNicknameByGroup,

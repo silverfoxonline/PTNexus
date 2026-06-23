@@ -8,7 +8,6 @@ import (
 	acquirefetch "github.com/pt-nexus/server/internal/service/acquire/fetch"
 	publishchecker "github.com/pt-nexus/server/internal/service/publish/checker"
 	publishdownloader "github.com/pt-nexus/server/internal/service/publish/downloader"
-	publishguard "github.com/pt-nexus/server/internal/service/publish/guard"
 	publishuploader "github.com/pt-nexus/server/internal/service/publish/uploader"
 )
 
@@ -88,19 +87,14 @@ func ExecutePublish(input PublishExecutionInput, deps PublishExecutionDeps) (map
 		return buildPreCheckFailure("缺少有效 downloaderId，已停止发布")
 	}
 
-	canContinue, limitMessage := publishguard.CheckDownloaderGate(resolvedDownloaderID)
-	if !canContinue {
-		if strings.TrimSpace(limitMessage) == "" {
-			limitMessage = "已触发限制"
-		}
-		return buildPreCheckFailure(limitMessage)
-	}
-
 	publishURL, directDownloadURL, logs, isExistingTorrent, uploadFormFields, publishErr := PublishTorrentToTarget(
 		targetInfo,
 		uploadData,
+		payload,
 		strings.TrimSpace(input.TorrentPath),
 		strings.TrimSpace(input.SourceSiteNickname),
+		resolvedSavePath,
+		resolvedDownloaderID,
 		deps.FindSiteNicknameByGroup,
 	)
 	targetNickname := strings.TrimSpace(toStringAny(targetInfo["nickname"], targetSite))
