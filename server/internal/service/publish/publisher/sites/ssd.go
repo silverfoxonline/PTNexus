@@ -53,16 +53,24 @@ func (ssdPublisher) BuildExtraFormFields(input publisher.PublishInput) (map[stri
 		return fallback
 	}
 
-	screenshots, err := resolveSSDScreenshots(input)
+	screenshotURLs, err := resolveSSDScreenshotURLs(input)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(screenshots) == "" {
+	if len(screenshotURLs) == 0 {
 		return nil, fmt.Errorf("CMCT requires PNG screenshots on a whitelisted image host")
+	}
+	infoURL := strings.TrimSpace(input.DoubanLink)
+	if infoURL == "" {
+		infoURL = strings.TrimSpace(input.IMDbLink)
+	}
+	if infoURL == "" {
+		return nil, fmt.Errorf("CMCT requires a Douban or IMDb link")
 	}
 
 	extra := map[string]string{
-		resolveFieldName("description", "descr"): screenshots,
+		resolveFieldName("imdb_url", "url"):              infoURL,
+		resolveFieldName("screenshots", "url_vimages"): strings.Join(screenshotURLs, "\n"),
 	}
 	if mediaInfo, mediaErr := resolveSSDEpisodeOneMediaInfo(input); mediaErr == nil && strings.TrimSpace(mediaInfo) != "" {
 		extra[resolveFieldName("technical_info", "technical_info")] = strings.TrimSpace(mediaInfo)
@@ -74,6 +82,7 @@ func (ssdPublisher) AdjustFormFields(input publisher.PublishInput, formFields ma
 	if formFields == nil {
 		return
 	}
+	delete(formFields, "dburl")
 	for _, key := range []string{"descr", "description"} {
 		if _, exists := formFields[key]; exists {
 			formFields[key] = strings.TrimSpace(formFields[key])
@@ -81,10 +90,10 @@ func (ssdPublisher) AdjustFormFields(input publisher.PublishInput, formFields ma
 	}
 }
 
-func resolveSSDScreenshots(input publisher.PublishInput) (string, error) {
+func resolveSSDScreenshotURLs(input publisher.PublishInput) ([]string, error) {
 	raw := resolveUploadSection(input.UploadData, "screenshots")
 	if urls := normalizeSSDWhitelistedPNGURLs(extractImageURLsFromText(raw)); len(urls) > 0 {
-		return processingrepair.ToBBCodeImages(urls), nil
+		return urls, nil
 	}
 
 	payload := map[string]any{}
@@ -121,13 +130,13 @@ func resolveSSDScreenshots(input publisher.PublishInput) (string, error) {
 		RootConfig:  nil,
 	})
 	if err != nil {
-		return "", fmt.Errorf("CMCT screenshot refresh failed: %w", err)
+		return nil, fmt.Errorf("CMCT screenshot refresh failed: %w", err)
 	}
 	urls := normalizeSSDWhitelistedPNGURLs(generated)
 	if len(urls) == 0 {
-		return "", fmt.Errorf("CMCT screenshot refresh did not return PNG links on a whitelisted host")
+		return nil, fmt.Errorf("CMCT screenshot refresh did not return PNG links on a whitelisted host")
 	}
-	return processingrepair.ToBBCodeImages(urls), nil
+	return urls, nil
 }
 
 func normalizeSSDWhitelistedPNGURLs(urls []string) []string {
