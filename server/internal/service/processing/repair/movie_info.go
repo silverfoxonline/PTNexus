@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pt-nexus/server/internal/platform/logx"
+	parser "github.com/pt-nexus/server/internal/service/acquire/extract"
 )
 
 const ptgenLogModule = "媒体校验-PTGen"
@@ -89,6 +90,7 @@ func FetchMovieInfo(mediaType, contentName, subtitle string, sourceInfo map[stri
 	format, formatIMDb, formatDouban, formatTMDb, errMsg := fetchPTGenFormat(result, csptToken)
 	if errMsg == "" && strings.TrimSpace(format) != "" {
 		poster, intro, imdb, douban, tmdb := parseFormatContent(format, formatIMDb, formatDouban, formatTMDb)
+		result.Source = firstNonEmpty(inferSourceFromMovieMetadata(format), result.Source)
 		result.IMDb = firstNonEmpty(imdb, result.IMDb)
 		result.Douban = firstNonEmpty(douban, result.Douban)
 		result.TMDb = firstNonEmpty(tmdb, result.TMDb)
@@ -122,6 +124,7 @@ func FetchMovieInfo(mediaType, contentName, subtitle string, sourceInfo map[stri
 				result.TMDb,
 				backfillTMDbByIMDbIfNeeded(result.TMDb, result.IMDb, &tmdbBackfillAttempted, movieInfoLogModule, "豆瓣页面解析后"),
 			)
+			result.Source = firstNonEmpty(inferSourceFromMovieMetadata(doubanHTML), result.Source)
 			posterURLs := extractPosterURLs(doubanHTML, result.Douban)
 			summary := extractDoubanSummary(doubanHTML)
 			if mediaType == "poster" && len(posterURLs) > 0 {
@@ -196,6 +199,41 @@ func FetchMovieInfo(mediaType, contentName, subtitle string, sourceInfo map[stri
 		CompactLogText(result.TMDb, 120),
 	)
 	return result, "未能获取有效简介，请检查豆瓣/IMDb/TMDb链接或网络连通性。"
+}
+
+func ResolveMovieSourceFromLinks(doubanLink, imdbLink, csptToken string) string {
+	douban := NormalizeExternalLink(doubanLink, reDoubanLink)
+	imdb := NormalizeExternalLink(imdbLink, reIMDbLink)
+	if douban != "" {
+		format, _, _, _, _ := fetchPTGenFormat(MovieInfoResult{Douban: douban, IMDb: imdb}, csptToken)
+		if source := inferSourceFromMovieMetadata(format); source != "" {
+			return source
+		}
+		if doubanHTML, err := FetchPageWithTimeout(douban); err == nil {
+			if source := inferSourceFromMovieMetadata(doubanHTML); source != "" {
+				return source
+			}
+		}
+	}
+	if imdb != "" {
+		format, _, _, _, _ := fetchPTGenFormat(MovieInfoResult{IMDb: imdb}, csptToken)
+		if source := inferSourceFromMovieMetadata(format); source != "" {
+			return source
+		}
+	}
+	return ""
+}
+
+func inferSourceFromMovieMetadata(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	if source := strings.TrimSpace(parser.InferSourceFromDescription(trimmed)); source != "" {
+		return source
+	}
+	visible := sanitizeHTMLText(trimmed, true)
+	return strings.TrimSpace(parser.InferSourceFromDescription(visible))
 }
 
 func logFetchMovieInfoResult(mediaType, source string, result MovieInfoResult, note string) {

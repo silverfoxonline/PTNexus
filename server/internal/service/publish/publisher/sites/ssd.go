@@ -97,6 +97,34 @@ func (ssdPublisher) AdjustFormFields(input publisher.PublishInput, formFields ma
 	}
 }
 
+func hasSSDChineseSubtitle(uploadData map[string]any) bool {
+	if uploadData == nil {
+		return false
+	}
+	subtitle := strings.ToLower(strings.TrimSpace(toStringAny(uploadData["subtitle"], "")))
+	if subtitle == "" {
+		return false
+	}
+	for _, token := range []string{
+		"\u4e2d\u5b57",
+		"\u4e2d\u6587\u5b57\u5e55",
+		"\u7b80\u4f53",
+		"\u7e41\u4f53",
+		"\u7b80\u7e41",
+		"\u4e2d\u82f1",
+		"\u7b80\u82f1",
+		"\u7e41\u82f1",
+		"chs",
+		"cht",
+		"chinese",
+	} {
+		if strings.Contains(subtitle, strings.ToLower(token)) {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeSSDMediaInfo(text string) string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -129,6 +157,9 @@ func applySSDTagCheckboxes(uploadData map[string]any, formFields map[string]stri
 	setIfAnyTag("untouched", "tag.原生", "原生")
 	setIfAnyTag("mandarin", "tag.国配", "tag.国语", "国配", "国语")
 	setIfAnyTag("subtitlezh", "tag.中字", "中字")
+	if hasSSDChineseSubtitle(uploadData) {
+		formFields["subtitlezh"] = "1"
+	}
 	setIfAnyTag("subtitlesp", "tag.特效", "特效", "特效字幕")
 	setIfAnyTag("selfcompile", "tag.自译", "自译")
 	setIfAnyTag("dovi", "tag.杜比", "tag.Dolby Vision", "DoVi", "Dolby Vision", "杜比")

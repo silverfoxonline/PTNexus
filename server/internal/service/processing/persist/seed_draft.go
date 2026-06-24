@@ -91,7 +91,7 @@ func (d *SeedDraft) ApplyReviewExtract(review parser.ReviewExtractedData, detail
 	d.Poster = strings.TrimSpace(review.Poster)
 	d.Body = strings.TrimSpace(review.Body)
 	d.Screenshots = strings.TrimSpace(review.Screens)
-	d.Mediainfo = strings.TrimSpace(review.Mediainfo)
+	d.Mediainfo = NormalizeSeedMediaInfo(review.Mediainfo)
 
 	d.Type = strings.TrimSpace(review.Type)
 	d.Medium = strings.TrimSpace(review.Medium)
@@ -142,6 +142,9 @@ func (d *SeedDraft) ApplyRepairResult(result processingrepair.ParallelFetchRepai
 	d.IMDbLink = strings.TrimSpace(result.IMDbLink)
 	d.DoubanLink = strings.TrimSpace(result.DoubanLink)
 	d.TMDbLink = strings.TrimSpace(result.TMDbLink)
+	if source := strings.TrimSpace(result.ReviewData.Source); source != "" {
+		d.Source = source
+	}
 }
 
 // CorrectMediumAndTitleByMediaType 在识别 MediaInfo/BDInfo 后，对媒介键与标题 BluRay 标记纠偏。
@@ -304,7 +307,7 @@ func (d *SeedDraft) ToSeedParameterRecord() map[string]any {
 		"screenshot_review_status":  strings.TrimSpace(d.ScreenshotReviewStatus),
 		"statement":                 strings.TrimSpace(d.Statement),
 		"body":                      strings.TrimSpace(d.Body),
-		"mediainfo":                 strings.TrimSpace(d.Mediainfo),
+		"mediainfo":                 NormalizeSeedMediaInfo(d.Mediainfo),
 		"title_components":          string(encodedComponents),
 		"removed_ardtudeclarations": string(encodedRemoved),
 		"is_reviewed":               d.IsReviewed,

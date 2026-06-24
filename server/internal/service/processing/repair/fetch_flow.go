@@ -63,6 +63,7 @@ type ParallelFetchRepairResult struct {
 	IMDbLink                  string
 	DoubanLink                string
 	TMDbLink                  string
+	Source                    string
 	ScreenshotReviewStatus    string
 	ScreenshotPreviewRequired bool
 }
@@ -79,6 +80,7 @@ type introRepairResult struct {
 	IMDbLink   string
 	DoubanLink string
 	TMDbLink   string
+	Source     string
 }
 
 type screenshotsRepairResult struct {
@@ -218,6 +220,10 @@ func RunParallelFetchRepairs(input ParallelFetchRepairInput, deps FetchRepairDep
 
 	merged.IMDbLink = firstNonEmpty(merged.IMDbLink, strings.TrimSpace(posterResult.IMDbLink), strings.TrimSpace(introResult.IMDbLink))
 	merged.DoubanLink = firstNonEmpty(merged.DoubanLink, strings.TrimSpace(posterResult.DoubanLink), strings.TrimSpace(introResult.DoubanLink))
+	if source := strings.TrimSpace(introResult.Source); source != "" {
+		merged.ReviewData.Source = source
+		merged.Source = source
+	}
 	merged.TMDbLink = firstNonEmpty(merged.TMDbLink, strings.TrimSpace(posterResult.TMDbLink), strings.TrimSpace(introResult.TMDbLink))
 	tmdbBackfillAttempted := false
 	merged.TMDbLink = firstNonEmpty(
@@ -230,6 +236,10 @@ func RunParallelFetchRepairs(input ParallelFetchRepairInput, deps FetchRepairDep
 			"并发修复汇总后",
 		),
 	)
+	if source := ResolveMovieSourceFromLinks(merged.DoubanLink, merged.IMDbLink, strings.TrimSpace(deps.CSPTToken)); source != "" {
+		merged.ReviewData.Source = source
+		merged.Source = source
+	}
 	if strings.TrimSpace(merged.ReviewData.Body) != "" {
 		merged.ReviewData.Body = ensureTMDbLinkLineForPTGenIntro(merged.ReviewData.Body, merged.TMDbLink)
 	}
@@ -303,6 +313,7 @@ func TriggerMediainfoRepairDuringFetch(input TriggerMediainfoRepairInput, deps F
 	emitLog(deps, input.TaskID, "修复媒体信息", "媒体信息修复未产出有效内容", "warning")
 }
 
+
 func runPosterRepairTask(input ParallelFetchRepairInput, deps FetchRepairDeps) posterRepairResult {
 	localReview := input.ReviewData
 	localIMDb := strings.TrimSpace(input.IMDbLink)
@@ -332,6 +343,7 @@ func runIntroRepairTask(input ParallelFetchRepairInput, deps FetchRepairDeps) in
 		IMDbLink:   localIMDb,
 		DoubanLink: localDouban,
 		TMDbLink:   localTMDb,
+		Source:     localReview.Source,
 	}
 }
 
@@ -525,6 +537,9 @@ func repairIntroBodyDuringFetch(
 	*imdbLink = firstNonEmpty(strings.TrimSpace(stringValue(imdbLink)), strings.TrimSpace(introResult.IMDb))
 	*doubanLink = firstNonEmpty(strings.TrimSpace(stringValue(doubanLink)), strings.TrimSpace(introResult.Douban))
 	*tmdbLink = firstNonEmpty(strings.TrimSpace(stringValue(tmdbLink)), strings.TrimSpace(introResult.TMDb))
+	if source := strings.TrimSpace(introResult.Source); source != "" {
+		reviewData.Source = source
+	}
 
 	updatedBody := strings.TrimSpace(reviewData.Body)
 	if updatedBody != "" {

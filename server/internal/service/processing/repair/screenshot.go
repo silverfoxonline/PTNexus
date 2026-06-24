@@ -338,10 +338,28 @@ func buildRemotePathCandidatesForProxy(savePath, torrentName, contentName string
 	if trimmedSavePath != "" && trimmedContentName != "" && !strings.EqualFold(trimmedContentName, trimmedTorrentName) {
 		candidates = append(candidates, filepath.Join(trimmedSavePath, trimmedContentName))
 	}
-	if trimmedSavePath != "" {
+	if shouldIncludeRemoteSavePath(trimmedSavePath, trimmedTorrentName, trimmedContentName) {
 		candidates = append(candidates, trimmedSavePath)
 	}
 	return candidates
+}
+
+func shouldIncludeRemoteSavePath(savePath, torrentName, contentName string) bool {
+	trimmedSavePath := strings.TrimSpace(savePath)
+	if trimmedSavePath == "" {
+		return false
+	}
+	trimmedTorrentName := strings.TrimSpace(torrentName)
+	trimmedContentName := strings.TrimSpace(contentName)
+	if trimmedTorrentName == "" && trimmedContentName == "" {
+		return true
+	}
+	base := strings.TrimSpace(filepath.Base(trimmedSavePath))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return false
+	}
+	return (trimmedTorrentName != "" && strings.EqualFold(base, trimmedTorrentName)) ||
+		(trimmedContentName != "" && strings.EqualFold(base, trimmedContentName))
 }
 
 func fileSizeBytes(path string) int64 {

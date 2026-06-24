@@ -114,7 +114,7 @@ func BuildManualUpdatedSeedRecord(input BuildManualUpdateInput) BuildManualUpdat
 	draft.ScreenshotReviewStatus = screenshotReviewStatus
 	draft.Statement = toStringAny(updated["statement"], toStringAny(existing["statement"], ""))
 	draft.Body = toStringAny(updated["body"], toStringAny(existing["body"], ""))
-	draft.Mediainfo = toStringAny(updated["mediainfo"], toStringAny(existing["mediainfo"], ""))
+	draft.Mediainfo = NormalizeSeedMediaInfo(toStringAny(updated["mediainfo"], toStringAny(existing["mediainfo"], "")))
 	draft.TitleComponents = titleComponentsAnyToMapSlice(titleComponents)
 	draft.RemovedARDTUDeclarations = removedDeclarations
 	draft.IsReviewed = true

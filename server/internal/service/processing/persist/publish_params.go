@@ -80,7 +80,7 @@ func BuildCompletePublishParams(row map[string]any) map[string]any {
 			"screenshots":               row["screenshots"],
 			"removed_ardtudeclarations": row["removed_ardtudeclarations"],
 		},
-		"mediainfo":           row["mediainfo"],
+		"mediainfo":           NormalizeSeedMediaInfo(toStringAny(row["mediainfo"], "")),
 		"standardized_params": BuildStandardizedParams(row),
 	}
 }
