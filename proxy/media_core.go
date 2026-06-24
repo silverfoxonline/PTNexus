@@ -878,6 +878,10 @@ func findTargetVideoFile(path string, contentName string) (string, error) {
 	return videoFiles[0].path, nil
 }
 
+var (
+	rePixhostThumbURL             = regexp.MustCompile(`(?i)^https?://t(\d+)\.pixhost\.to/thumbs/(\d+)/([^/?#]+\.(?:jpg|jpeg|png|gif|webp))`)
+)
+
 func uploadToPixhost(imagePath string) (string, error) {
 	apiURLs := []string{
 		"https://api.pixhost.to/images",
@@ -979,13 +983,44 @@ func uploadToPixhostDirectStream(imagePath string, apiURL string) (string, int, 
 		return "", resp.StatusCode, fmt.Errorf("failed to parse pixhost response: %w", err)
 	}
 	showURL := strings.TrimSpace(toStringAny(parsed["show_url"], ""))
-	if showURL == "" {
-		if dataMap, ok := parsed["data"].(map[string]any); ok {
+	thumbURL := firstPixhostResponseValue(parsed, "th_url", "thumb_url", "thumbnail_url")
+	if dataMap, ok := parsed["data"].(map[string]any); ok {
+		if showURL == "" {
 			showURL = strings.TrimSpace(toStringAny(dataMap["show_url"], ""))
 		}
+		if thumbURL == "" {
+			thumbURL = firstPixhostResponseValue(dataMap, "th_url", "thumb_url", "thumbnail_url")
+		}
+	}
+	if directURL := pixhostThumbToDirectURL(thumbURL); directURL != "" {
+		return directURL, resp.StatusCode, nil
 	}
 	if showURL == "" {
 		return "", resp.StatusCode, fmt.Errorf("pixhost response did not include show_url")
 	}
 	return showURL, resp.StatusCode, nil
+}
+
+func firstPixhostResponseValue(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(toStringAny(values[key], "")); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func pixhostThumbToDirectURL(thumbURL string) string {
+	trimmed := strings.TrimSpace(thumbURL)
+	if trimmed == "" {
+		return ""
+	}
+	match := rePixhostThumbURL.FindStringSubmatch(trimmed)
+	if len(match) < 4 {
+		return ""
+	}
+	return fmt.Sprintf("https://img%s.pixhost.to/images/%s/%s", match[1], match[2], strings.TrimSpace(match[3]))
 }

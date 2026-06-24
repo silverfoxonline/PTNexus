@@ -24,11 +24,10 @@ const posterTransferDownloadRetry = 2
 
 var (
 	rePixhostDirect             = regexp.MustCompile(`(\d+)/([^/]+\.(?:jpg|jpeg|png|gif|webp))`)
+	rePixhostThumbURL           = regexp.MustCompile(`(?i)^https?://t(\d+)\.pixhost\.to/thumbs/(\d+)/([^/?#]+\.(?:jpg|jpeg|png|gif|webp))`)
 	rePixhostOgImage            = regexp.MustCompile(`(?is)<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']`)
 	rePixhostImageTag           = regexp.MustCompile(`(?is)<img[^>]+id=["']image["'][^>]*src=["']([^"']+)["']`)
-	rePixhostThumbSuffix        = regexp.MustCompile(`_[^.]{1,3}\.(jpg|jpeg|png|gif|webp)$`)
-	rePixhostNumericThumbPrefix = regexp.MustCompile(`^\d+_(.+\.(?:jpg|jpeg|png|gif|webp))$`)
-	rePixhostDirectURL          = regexp.MustCompile(`^https://img[12]\.pixhost\.to/images/\d+/[^/]+\.(jpg|jpeg|png|gif|webp)$`)
+	rePixhostDirectURL          = regexp.MustCompile(`^https://img\d+\.pixhost\.to/images/\d+/[^/]+\.(jpg|jpeg|png|gif|webp)$`)
 	posterTransferProxyPrefixes = []string{
 		"http://pt-nexus-proxy.sqing33.dpdns.org/",
 		"http://pt-nexus-proxy.1395251710.workers.dev/",
@@ -463,10 +462,18 @@ func uploadToPixhostDirectStream(imagePath string, apiURL string, logLine func(s
 		return "", resp.StatusCode, fmt.Errorf("Pixhost 响应解析失败: %w", err)
 	}
 	showURL := strings.TrimSpace(toStringAny(parsed["show_url"], ""))
-	if showURL == "" {
-		if dataMap, ok := parsed["data"].(map[string]any); ok {
+	thumbURL := firstPixhostResponseValue(parsed, "th_url", "thumb_url", "thumbnail_url")
+	if dataMap, ok := parsed["data"].(map[string]any); ok {
+		if showURL == "" {
 			showURL = strings.TrimSpace(toStringAny(dataMap["show_url"], ""))
 		}
+		if thumbURL == "" {
+			thumbURL = firstPixhostResponseValue(dataMap, "th_url", "thumb_url", "thumbnail_url")
+		}
+	}
+	if direct := PixhostThumbToDirectURL(thumbURL); direct != "" {
+		logLine("直接上传成功！图片链接: %s", direct)
+		return direct, resp.StatusCode, nil
 	}
 	if showURL == "" {
 		return "", resp.StatusCode, fmt.Errorf("Pixhost 未返回 show_url")
@@ -474,6 +481,18 @@ func uploadToPixhostDirectStream(imagePath string, apiURL string, logLine func(s
 
 	logLine("直接上传成功！图片链接: %s", showURL)
 	return showURL, resp.StatusCode, nil
+}
+
+func firstPixhostResponseValue(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(toStringAny(values[key], "")); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func classifyPixhostUploadError(err error) string {
@@ -500,6 +519,9 @@ func ResolvePixhostImageURL(showURL string) (string, error) {
 		return "", fmt.Errorf("empty show_url")
 	}
 
+	if direct := PixhostThumbToDirectURL(trimmed); direct != "" && IsImageURLReachable(direct) {
+		return direct, nil
+	}
 	direct := PixhostShowToDirectURL(trimmed)
 	if direct != "" && IsImageURLReachable(direct) {
 		return direct, nil
@@ -507,6 +529,11 @@ func ResolvePixhostImageURL(showURL string) (string, error) {
 
 	body, err := FetchPageWithTimeout(trimmed)
 	if err == nil && strings.TrimSpace(body) != "" {
+		if thumb := rePixhostThumbURL.FindString(body); thumb != "" {
+			if candidate := PixhostThumbToDirectURL(thumb); candidate != "" && IsImageURLReachable(candidate) {
+				return candidate, nil
+			}
+		}
 		for _, re := range []*regexp.Regexp{rePixhostOgImage, rePixhostImageTag} {
 			match := re.FindStringSubmatch(body)
 			if len(match) < 2 {
@@ -516,7 +543,9 @@ func ResolvePixhostImageURL(showURL string) (string, error) {
 			if candidate == "" {
 				continue
 			}
-			if strings.Contains(candidate, "pixhost.to/show/") || strings.Contains(candidate, "pixhost.to/th/") {
+			if direct := PixhostThumbToDirectURL(candidate); direct != "" {
+				candidate = direct
+			} else if strings.Contains(candidate, "pixhost.to/show/") || strings.Contains(candidate, "pixhost.to/th/") {
 				candidate = PixhostShowToDirectURL(candidate)
 			}
 			candidate = NormalizePixhostDirectHost(candidate)
@@ -532,6 +561,18 @@ func ResolvePixhostImageURL(showURL string) (string, error) {
 	return trimmed, fmt.Errorf("无法解析 pixhost 直链，返回 show_url")
 }
 
+func PixhostThumbToDirectURL(thumbURL string) string {
+	trimmed := strings.TrimSpace(thumbURL)
+	if trimmed == "" {
+		return ""
+	}
+	match := rePixhostThumbURL.FindStringSubmatch(trimmed)
+	if len(match) < 4 {
+		return ""
+	}
+	return fmt.Sprintf("https://img%s.pixhost.to/images/%s/%s", match[1], match[2], strings.TrimSpace(match[3]))
+}
+
 // PixhostShowToDirectURL 尝试将 pixhost show/th 页面地址转换为图片直链。
 func PixhostShowToDirectURL(showURL string) string {
 	trimmed := strings.TrimSpace(showURL)
@@ -543,32 +584,23 @@ func PixhostShowToDirectURL(showURL string) string {
 	direct = strings.Replace(direct, "https://pixhost.to/th/", "https://img2.pixhost.to/images/", 1)
 	direct = strings.Replace(direct, "http://pixhost.to/show/", "https://img2.pixhost.to/images/", 1)
 	direct = strings.Replace(direct, "http://pixhost.to/th/", "https://img2.pixhost.to/images/", 1)
-	direct = rePixhostThumbSuffix.ReplaceAllString(direct, `.$1`)
 
 	if rePixhostDirectURL.MatchString(direct) {
 		return direct
 	}
 	if match := rePixhostDirect.FindStringSubmatch(direct); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
+		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
 		if rePixhostDirectURL.MatchString(candidate) {
 			return candidate
 		}
 	}
 	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
+		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
 		if rePixhostDirectURL.MatchString(candidate) {
 			return candidate
 		}
 	}
 	return ""
-}
-
-func normalizePixhostImageFilename(filename string) string {
-	trimmed := strings.TrimSpace(filename)
-	if match := rePixhostNumericThumbPrefix.FindStringSubmatch(trimmed); len(match) >= 2 {
-		return strings.TrimSpace(match[1])
-	}
-	return trimmed
 }
 
 // NormalizePixhostDirectHost 规范化 Pixhost 直链域名到 img*.pixhost.to。
@@ -585,7 +617,10 @@ func NormalizePixhostDirectHost(value string) string {
 		parsed.Scheme = "https"
 	}
 	host := strings.ToLower(strings.TrimSpace(parsed.Host))
-	if strings.HasPrefix(host, "img1.pixhost.to") || strings.HasPrefix(host, "img2.pixhost.to") {
+	if direct := PixhostThumbToDirectURL(parsed.String()); direct != "" {
+		return direct
+	}
+	if regexp.MustCompile(`^img\d+\.pixhost\.to$`).MatchString(host) {
 		return parsed.String()
 	}
 	if strings.Contains(host, "pixhost.to") && strings.Contains(parsed.Path, "/images/") {
@@ -594,7 +629,7 @@ func NormalizePixhostDirectHost(value string) string {
 		return parsed.String()
 	}
 	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		return fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], normalizePixhostImageFilename(match[2]))
+		return fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
 	}
 	return ""
 }

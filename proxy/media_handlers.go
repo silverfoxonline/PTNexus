@@ -172,7 +172,14 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			directURL := strings.Replace(showURL, "https://pixhost.to/show/", "https://img2.pixhost.to/images/", 1)
+			directURL := pixhostThumbToDirectURL(showURL)
+			if directURL == "" && strings.Contains(showURL, "/images/") {
+				directURL = showURL
+			}
+			if directURL == "" {
+				log.Printf("screenshot %d uploaded but pixhost direct URL could not be resolved: %s", i+1, showURL)
+				continue
+			}
 			uploadedURLs = append(uploadedURLs, directURL)
 		}
 

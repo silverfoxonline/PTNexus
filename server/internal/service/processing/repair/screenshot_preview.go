@@ -447,15 +447,13 @@ func generateAndUploadScreenshotsWithPoints(input ScreenshotGenerateInput, selec
 				}
 				logLine("   🚀 上传成功: %s", showURL)
 
-				finalURL := strings.TrimSpace(showURL)
-				if direct := PixhostShowToDirectURL(showURL); strings.TrimSpace(direct) != "" {
-					if normalized := NormalizePixhostDirectHost(direct); strings.TrimSpace(normalized) != "" {
-						finalURL = normalized
-					} else {
-						finalURL = direct
-					}
+				finalURL, resolveErr := ResolvePixhostImageURL(showURL)
+				if resolveErr != nil || strings.TrimSpace(finalURL) == "" {
+					logLine("   ❌ Pixhost直链解析失败: %v", resolveErr)
+					results <- uploadResult{Index: job.Index, OK: false, LogBlock: buf.String()}
+					continue
 				}
-				results <- uploadResult{Index: job.Index, OK: true, URL: finalURL, LogBlock: buf.String()}
+				results <- uploadResult{Index: job.Index, OK: true, URL: strings.TrimSpace(finalURL), LogBlock: buf.String()}
 			}
 		}()
 	}
