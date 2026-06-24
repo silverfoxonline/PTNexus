@@ -699,9 +699,9 @@ func normalizeFetchWhitelistedPNGURL(raw string) string {
 	if trimmed == "" {
 		return ""
 	}
-	if direct := PixhostShowToDirectURL(trimmed); strings.TrimSpace(direct) != "" {
+	if direct := NormalizePixhostDirectHost(trimmed); strings.TrimSpace(direct) != "" {
 		trimmed = strings.TrimSpace(direct)
-	} else if direct := NormalizePixhostDirectHost(trimmed); strings.TrimSpace(direct) != "" {
+	} else if direct := PixhostShowToDirectURL(trimmed); strings.TrimSpace(direct) != "" {
 		trimmed = strings.TrimSpace(direct)
 	}
 	parsed, err := neturl.Parse(trimmed)

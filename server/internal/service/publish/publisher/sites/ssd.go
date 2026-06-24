@@ -250,9 +250,9 @@ func normalizeSSDImageURL(raw string) string {
 	if trimmed == "" {
 		return ""
 	}
-	if direct := processingrepair.PixhostShowToDirectURL(trimmed); strings.TrimSpace(direct) != "" {
+	if direct := processingrepair.NormalizePixhostDirectHost(trimmed); strings.TrimSpace(direct) != "" {
 		trimmed = strings.TrimSpace(direct)
-	} else if direct := processingrepair.NormalizePixhostDirectHost(trimmed); strings.TrimSpace(direct) != "" {
+	} else if direct := processingrepair.PixhostShowToDirectURL(trimmed); strings.TrimSpace(direct) != "" {
 		trimmed = strings.TrimSpace(direct)
 	}
 	parsed, err := neturl.Parse(trimmed)

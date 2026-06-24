@@ -23,7 +23,6 @@ const posterTransferLogModule = "迁移-海报转存"
 const posterTransferDownloadRetry = 2
 
 var (
-	rePixhostDirect             = regexp.MustCompile(`(\d+)/([^/]+\.(?:jpg|jpeg|png|gif|webp))`)
 	rePixhostThumbURL           = regexp.MustCompile(`(?i)^https?://t(\d+)\.pixhost\.to/thumbs/(\d+)/([^/?#]+\.(?:jpg|jpeg|png|gif|webp))`)
 	rePixhostOgImage            = regexp.MustCompile(`(?is)<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']`)
 	rePixhostImageTag           = regexp.MustCompile(`(?is)<img[^>]+id=["']image["'][^>]*src=["']([^"']+)["']`)
@@ -579,25 +578,26 @@ func PixhostShowToDirectURL(showURL string) string {
 	if trimmed == "" {
 		return ""
 	}
-
-	direct := strings.Replace(trimmed, "https://pixhost.to/show/", "https://img2.pixhost.to/images/", 1)
-	direct = strings.Replace(direct, "https://pixhost.to/th/", "https://img2.pixhost.to/images/", 1)
-	direct = strings.Replace(direct, "http://pixhost.to/show/", "https://img2.pixhost.to/images/", 1)
-	direct = strings.Replace(direct, "http://pixhost.to/th/", "https://img2.pixhost.to/images/", 1)
-
-	if rePixhostDirectURL.MatchString(direct) {
+	if direct := PixhostThumbToDirectURL(trimmed); direct != "" {
 		return direct
 	}
-	if match := rePixhostDirect.FindStringSubmatch(direct); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
-		if rePixhostDirectURL.MatchString(candidate) {
-			return candidate
-		}
+
+	parsed, err := neturl.Parse(trimmed)
+	if err != nil || parsed == nil {
+		return ""
 	}
-	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		candidate := fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
-		if rePixhostDirectURL.MatchString(candidate) {
-			return candidate
+	if parsed.Scheme == "" {
+		parsed.Scheme = "https"
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Host))
+	if regexp.MustCompile(`^img\d+\.pixhost\.to$`).MatchString(host) && rePixhostDirectURL.MatchString(parsed.String()) {
+		return parsed.String()
+	}
+	if host == "pixhost.to" && strings.HasPrefix(parsed.Path, "/images/") {
+		parsed.Host = "img2.pixhost.to"
+		parsed.Scheme = "https"
+		if rePixhostDirectURL.MatchString(parsed.String()) {
+			return parsed.String()
 		}
 	}
 	return ""
@@ -627,9 +627,6 @@ func NormalizePixhostDirectHost(value string) string {
 		parsed.Host = "img2.pixhost.to"
 		parsed.Scheme = "https"
 		return parsed.String()
-	}
-	if match := rePixhostDirect.FindStringSubmatch(trimmed); len(match) >= 3 {
-		return fmt.Sprintf("https://img2.pixhost.to/images/%s/%s", match[1], strings.TrimSpace(match[2]))
 	}
 	return ""
 }
