@@ -603,6 +603,42 @@ func sanitizeSelectedScreenshotTimes(values []float64, duration float64) []float
 	return clean
 }
 
+func mergeScreenshotPointCandidates(primary []float64, secondary []float64, limit int, duration float64) []float64 {
+	points := make([]float64, 0, limit)
+	minSpacing := math.Max(12, duration/240)
+	appendPoint := func(candidate float64) {
+		if candidate <= 0 {
+			return
+		}
+		if duration > 0 && candidate > duration-1 {
+			candidate = math.Max(1, duration-1)
+		}
+		for _, existing := range points {
+			if math.Abs(existing-candidate) < minSpacing {
+				return
+			}
+		}
+		points = append(points, candidate)
+	}
+	for _, candidate := range primary {
+		if len(points) >= limit {
+			break
+		}
+		appendPoint(candidate)
+	}
+	for _, candidate := range secondary {
+		if len(points) >= limit {
+			break
+		}
+		appendPoint(candidate)
+	}
+	sort.Float64s(points)
+	if len(points) > limit {
+		return points[:limit]
+	}
+	return points
+}
+
 func formatSecondClockValue(value float64) string {
 	totalSeconds := int(math.Round(value))
 	if totalSeconds < 0 {
@@ -707,7 +743,7 @@ func generatePreviewCandidates(videoPath string, duration float64, count int, cu
 		return nil, fmt.Errorf("not enough preview candidates generated: %d", len(candidates))
 	}
 
-	markRecommendedPreviewCandidates(candidates, 5)
+	markRecommendedPreviewCandidates(candidates, 4)
 	return candidates, nil
 }
 

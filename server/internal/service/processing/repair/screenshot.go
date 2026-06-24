@@ -17,7 +17,7 @@ import (
 	processingmedia "github.com/pt-nexus/server/internal/service/processing/media"
 )
 
-const screenshotTotalCount = 5
+const screenshotTotalCount = 4
 
 // GenerateAndUploadScreenshots 从目标媒体自动截帧并上传到 Pixhost，返回可用图片链接列表。
 // 参数/返回：输入包含 payload/source_info/content_name/config，返回去重后的截图 URL。
@@ -137,11 +137,7 @@ func GenerateAndUploadScreenshots(input ScreenshotGenerateInput) ([]string, erro
 			logx.PlainWarnf("错误: 获取视频时长失败: %v", err)
 			return nil, fmt.Errorf("读取视频时长失败: %w", err)
 		}
-		percents := []float64{0.15, 0.30, 0.50, 0.70, 0.85}
-		points = make([]float64, 0, len(percents))
-		for _, p := range percents {
-			points = append(points, duration*p)
-		}
+		points = buildPreviewFallbackPoints(duration, screenshotTotalCount)
 	}
 	sort.Float64s(points)
 
