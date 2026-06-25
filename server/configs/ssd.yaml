@@ -7,6 +7,9 @@ form_fields:
   resolution: "standard_sel"
   video_codec: "codec_sel"
   audio_codec: "audiocodec_sel"
+  team: "team_sel"
+  technical_info: "Media_BDInfo"
+  screenshots: "url_vimages"
 
 source_parsers:
   source_params:
@@ -136,3 +139,96 @@ source_parsers:
       "Blu-ray": "tag.Blu-ray"
       "LIVE现场": "tag.LIVE现场"
       "default": null
+
+mappings:
+  type:
+    "category.movie": "501"
+    "category.tv_series": "502"
+    "category.documentaries": "503"
+    "category.tv_shows": "505"
+    "category.sports": "506"
+    "category.mv": "507"
+    "category.music": "508"
+    "category.audiobook": "510"
+    "category.other": "509"
+    "default": "501"
+
+  source:
+    "source.china": "1"
+    "source.hongkong": "2"
+    "source.taiwan": "3"
+    "source.western": "4"
+    "source.japan": "5"
+    "source.korea": "6"
+    "source.india": "7"
+    "source.russia": "8"
+    "source.thailand": "9"
+    "source.other": "99"
+    "default": "99"
+
+  medium:
+    "medium.bluray": "1"
+    "medium.remux": "4"
+    "medium.minibd": "2"
+    "medium.bdrip": "6"
+    "medium.webdl": "7"
+    "medium.webrip": "8"
+    "medium.hdtv": "5"
+    "medium.tvrip": "9"
+    "medium.dvd": "3"
+    "medium.dvdrip": "10"
+    "medium.cd": "11"
+    "medium.other": "99"
+    "default": "99"
+
+  video_codec:
+    "video.h265": "1"
+    "video.h264": "2"
+    "video.vc1": "3"
+    "video.mpeg2": "4"
+    "video.av1": "5"
+    "video.other": "99"
+    "default": "99"
+
+  audio_codec:
+    "audio.dts_hd": "1"
+    "audio.truehd": "2"
+    "audio.lpcm": "6"
+    "audio.dts": "3"
+    "audio.ddp": "11"
+    "audio.eac3": "11"
+    "audio.ac3": "4"
+    "audio.aac": "5"
+    "audio.flac": "7"
+    "audio.ape": "8"
+    "audio.wav": "9"
+    "audio.mp3": "10"
+    "audio.opus": "12"
+    "audio.av3a": "13"
+    "audio.other": "99"
+    "default": "99"
+
+  resolution:
+    "resolution.r2160p": "1"
+    "resolution.r1080p": "2"
+    "resolution.r1080i": "3"
+    "resolution.r720p": "4"
+    "resolution.sd": "5"
+    "resolution.other": "99"
+    "default": "99"
+
+  team:
+    "team.cmct": "1"
+    "team.cmcta": "8"
+    "team.cmctv": "9"
+    "team.oldboys": "2"
+    "team.gtr": "12"
+    "team.catedu": "13"
+    "team.telesto": "14"
+    "team.ifree": "15"
+    "team.ro": "16"
+    "team.xy": "17"
+    "team.7luacg": "18"
+    "team.sp": "19"
+    "team.rl": "90"
+    "default": "1"

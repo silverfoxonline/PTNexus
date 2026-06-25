@@ -21,7 +21,7 @@ import (
 const (
 	screenshotPreviewDefaultCount = 12
 	screenshotPreviewMinCount     = 5
-	screenshotPreviewSelectCount  = 5
+	screenshotPreviewSelectCount  = 4
 )
 
 const screenshotPreviewLogModule = "媒体校验-截图预览"
@@ -447,15 +447,13 @@ func generateAndUploadScreenshotsWithPoints(input ScreenshotGenerateInput, selec
 				}
 				logLine("   🚀 上传成功: %s", showURL)
 
-				finalURL := strings.TrimSpace(showURL)
-				if direct := PixhostShowToDirectURL(showURL); strings.TrimSpace(direct) != "" {
-					if normalized := NormalizePixhostDirectHost(direct); strings.TrimSpace(normalized) != "" {
-						finalURL = normalized
-					} else {
-						finalURL = direct
-					}
+				finalURL, resolveErr := ResolvePixhostImageURL(showURL)
+				if resolveErr != nil || strings.TrimSpace(finalURL) == "" {
+					logLine("   ❌ Pixhost直链解析失败: %v", resolveErr)
+					results <- uploadResult{Index: job.Index, OK: false, LogBlock: buf.String()}
+					continue
 				}
-				results <- uploadResult{Index: job.Index, OK: true, URL: finalURL, LogBlock: buf.String()}
+				results <- uploadResult{Index: job.Index, OK: true, URL: strings.TrimSpace(finalURL), LogBlock: buf.String()}
 			}
 		}()
 	}
@@ -633,7 +631,12 @@ func resolveFormalScreenshotPoints(
 	}
 	cleanSelected := sanitizeSelectedScreenshotTimes(selectedPoints, duration)
 	if len(cleanSelected) > 0 {
-		return cleanSelected, nil
+		fallback := buildPreviewFallbackPoints(duration, want)
+		points := mergeScreenshotPointCandidates(cleanSelected, fallback, want, duration)
+		if len(points) >= want {
+			return points, nil
+		}
+		return points, nil
 	}
 	if requireSelected {
 		return nil, fmt.Errorf("请选择 %d 张候选截图后再生成正式截图", screenshotPreviewSelectCount)
@@ -641,11 +644,7 @@ func resolveFormalScreenshotPoints(
 	points := buildSmartPointsForSelectedSubtitle(ffprobePath, targetVideoFile, want, currentSubtitleSID, hasSelectedCandidate, selectedCandidate)
 	if len(points) < want {
 		logx.PlainWarnf("警告: 智能分析失败，回退到按百分比截图。")
-		percents := []float64{0.15, 0.30, 0.50, 0.70, 0.85}
-		points = make([]float64, 0, len(percents))
-		for _, p := range percents {
-			points = append(points, duration*p)
-		}
+		points = buildPreviewFallbackPoints(duration, want)
 	}
 	return points, nil
 }

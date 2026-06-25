@@ -91,7 +91,7 @@ func (d *SeedDraft) ApplyReviewExtract(review parser.ReviewExtractedData, detail
 	d.Poster = strings.TrimSpace(review.Poster)
 	d.Body = strings.TrimSpace(review.Body)
 	d.Screenshots = strings.TrimSpace(review.Screens)
-	d.Mediainfo = strings.TrimSpace(review.Mediainfo)
+	d.Mediainfo = NormalizeSeedMediaInfo(review.Mediainfo)
 
 	d.Type = strings.TrimSpace(review.Type)
 	d.Medium = strings.TrimSpace(review.Medium)
@@ -126,7 +126,7 @@ func (d *SeedDraft) ApplyReviewExtract(review parser.ReviewExtractedData, detail
 	if subtitle == "" {
 		subtitle = strings.TrimSpace(processingrepair.ExtractDoubanSummary(detailHTML))
 	}
-	d.Subtitle = subtitle
+	d.Subtitle = NormalizeSeedSubtitle(subtitle)
 }
 
 // ApplyRepairResult 将“抓取修复”阶段（海报/简介/截图修复）的产物写回草稿。
@@ -142,6 +142,9 @@ func (d *SeedDraft) ApplyRepairResult(result processingrepair.ParallelFetchRepai
 	d.IMDbLink = strings.TrimSpace(result.IMDbLink)
 	d.DoubanLink = strings.TrimSpace(result.DoubanLink)
 	d.TMDbLink = strings.TrimSpace(result.TMDbLink)
+	if source := strings.TrimSpace(result.ReviewData.Source); source != "" {
+		d.Source = source
+	}
 }
 
 // CorrectMediumAndTitleByMediaType 在识别 MediaInfo/BDInfo 后，对媒介键与标题 BluRay 标记纠偏。
@@ -177,6 +180,16 @@ func (d *SeedDraft) CompleteAndMapTags(siteIdentifier string, formatIsBDInfo boo
 	if d == nil {
 		return []string{}
 	}
+
+	{
+		descriptionForTags := strings.TrimSpace(strings.Join([]string{d.Statement, d.Body}, "\n"))
+		if processingtagging.CheckAnimationTypeFromDescription(descriptionForTags) {
+			d.Type = "category.animation"
+		}
+	}
+	d.EpisodeTagReason = ""
+	d.Tags = NormalizeSeedTagsForReview(nil)
+	return []string{}
 
 	descriptionForTags := strings.TrimSpace(strings.Join([]string{d.Statement, d.Body}, "\n"))
 	rawTagCandidates := make([]string, 0, len(d.RawTags)+16)
@@ -277,7 +290,7 @@ func (d *SeedDraft) ToSeedParameterRecord() map[string]any {
 		"nickname":                  strings.TrimSpace(d.Nickname),
 		"name":                      strings.TrimSpace(d.Name),
 		"title":                     strings.TrimSpace(d.Title),
-		"subtitle":                  strings.TrimSpace(d.Subtitle),
+		"subtitle":                  NormalizeSeedSubtitle(d.Subtitle),
 		"imdb_link":                 strings.TrimSpace(d.IMDbLink),
 		"douban_link":               strings.TrimSpace(d.DoubanLink),
 		"tmdb_link":                 strings.TrimSpace(d.TMDbLink),
@@ -294,7 +307,7 @@ func (d *SeedDraft) ToSeedParameterRecord() map[string]any {
 		"screenshot_review_status":  strings.TrimSpace(d.ScreenshotReviewStatus),
 		"statement":                 strings.TrimSpace(d.Statement),
 		"body":                      strings.TrimSpace(d.Body),
-		"mediainfo":                 strings.TrimSpace(d.Mediainfo),
+		"mediainfo":                 NormalizeSeedMediaInfo(d.Mediainfo),
 		"title_components":          string(encodedComponents),
 		"removed_ardtudeclarations": string(encodedRemoved),
 		"is_reviewed":               d.IsReviewed,

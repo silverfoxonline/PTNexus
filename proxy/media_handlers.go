@@ -119,8 +119,8 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("capturing screenshots with usable subtitle stream sid=%d", subtitleSID)
 		}
 
-		screenshotPoints := make([]float64, 0, 5)
-		const numScreenshots = 5
+		const numScreenshots = 4
+		screenshotPoints := make([]float64, 0, numScreenshots)
 		if mode == "finalize" {
 			screenshotPoints = sanitizeSelectedScreenshotTimes(reqData.SelectedTimes, duration)
 			if len(screenshotPoints) == 0 {
@@ -128,15 +128,19 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 				response = ScreenshotResponse{Success: false, Message: "selected_times must contain at least one valid timestamp"}
 				return fmt.Errorf("selected_times cannot be empty")
 			}
+			if len(screenshotPoints) < numScreenshots {
+				screenshotPoints = mergeScreenshotPointCandidates(
+					screenshotPoints,
+					buildUniformPreviewPoints(duration, numScreenshots),
+					numScreenshots,
+					duration,
+				)
+			}
 		} else {
 			screenshotPoints = buildSmartScreenshotPointsForPreview(videoPath, duration, numScreenshots, subtitleSID, selectedCandidate, hasSelectedCandidate)
 			if len(screenshotPoints) < numScreenshots {
 				log.Printf("smart screenshot points were insufficient; falling back to uniform percentages")
-				percentages := []float64{0.15, 0.30, 0.50, 0.70, 0.85}
-				screenshotPoints = make([]float64, 0, len(percentages))
-				for _, p := range percentages {
-					screenshotPoints = append(screenshotPoints, duration*p)
-				}
+				screenshotPoints = buildUniformPreviewPoints(duration, numScreenshots)
 			}
 		}
 
@@ -172,7 +176,14 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			directURL := strings.Replace(showURL, "https://pixhost.to/show/", "https://img2.pixhost.to/images/", 1)
+			directURL := pixhostThumbToDirectURL(showURL)
+			if directURL == "" && strings.Contains(showURL, "/images/") {
+				directURL = showURL
+			}
+			if directURL == "" {
+				log.Printf("screenshot %d uploaded but pixhost direct URL could not be resolved: %s", i+1, showURL)
+				continue
+			}
 			uploadedURLs = append(uploadedURLs, directURL)
 		}
 

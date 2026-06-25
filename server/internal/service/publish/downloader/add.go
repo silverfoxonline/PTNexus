@@ -10,7 +10,6 @@ import (
 	"github.com/pt-nexus/server/internal/service/downloaderclient"
 	processingpersist "github.com/pt-nexus/server/internal/service/processing/persist"
 	processingshared "github.com/pt-nexus/server/internal/service/processing/shared"
-	publishguard "github.com/pt-nexus/server/internal/service/publish/guard"
 	publishuploader "github.com/pt-nexus/server/internal/service/publish/uploader"
 	"gorm.io/gorm"
 )
@@ -33,27 +32,11 @@ func AddToDownloader(payload map[string]any, rootConfig map[string]any, repo Add
 		return map[string]any{"success": false, "message": "错误：缺少必要参数 (url, savePath, downloaderId)。"}, 400
 	}
 
-	// 🚫 自动添加前预检查（对齐 Python）：避免触发做种/队列限制。
-	canContinue, limitMessage := publishguard.CheckDownloaderGate(downloaderID)
-	if !canContinue {
-		if strings.TrimSpace(limitMessage) == "" {
-			limitMessage = "已触发限制"
-		}
-		return map[string]any{
-			"success":       false,
-			"message":       strings.TrimSpace(limitMessage),
-			"downloader_id": nil,
-			"limit_reached": true,
-			"pre_check":     true,
-		}, 200
-	}
-
 	downloader, err := downloaderclient.FromConfig(rootConfig, downloaderID)
 	if err != nil {
 		return map[string]any{"success": false, "message": err.Error()}, 400
 	}
 
-	manualTags := processingpersist.ParseStringArray(payload["tags"])
 	siteNicknameHint := strings.TrimSpace(processingshared.ToString(payload["siteNickname"], processingshared.ToString(payload["site_nickname"], "")))
 	addOptions := downloaderclient.AddTorrentOptions{Paused: false}
 	detailSite := map[string]any{}
@@ -81,7 +64,7 @@ func AddToDownloader(payload map[string]any, rootConfig map[string]any, repo Add
 		resolvedSiteNickname = strings.TrimSpace(processingshared.ToString(detailSite["nickname"], ""))
 	}
 	configuredTags, configuredCategory := resolveConfiguredTagsAndCategory(rootConfig, resolvedSiteNickname)
-	addOptions.Tags = mergeTagLists(manualTags, configuredTags)
+	addOptions.Tags = mergeTagLists(configuredTags)
 	if downloader.Type == "transmission" && configuredCategory != "" {
 		addOptions.Tags = appendUniqueTag(addOptions.Tags, configuredCategory)
 	}

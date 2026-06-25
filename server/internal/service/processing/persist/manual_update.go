@@ -7,7 +7,6 @@ import (
 
 	parser "github.com/pt-nexus/server/internal/service/acquire/extract"
 	processingshared "github.com/pt-nexus/server/internal/service/processing/shared"
-	processingtagging "github.com/pt-nexus/server/internal/service/processing/tagging"
 	processingtitle "github.com/pt-nexus/server/internal/service/processing/title"
 )
 
@@ -67,7 +66,7 @@ func BuildManualUpdatedSeedRecord(input BuildManualUpdateInput) BuildManualUpdat
 			"resolution":  toStringAny(updated["resolution"], toStringAny(existing["resolution"], "")),
 			"team":        toStringAny(updated["team"], toStringAny(existing["team"], "")),
 			"source":      toStringAny(updated["source"], toStringAny(existing["source"], "")),
-			"tags":        parseStringArray(updated["tags"]),
+			"tags":        NormalizeSeedTagsForReview(updated["tags"]),
 			"imdb_link":   toStringAny(updated["imdb_link"], toStringAny(existing["imdb_link"], "")),
 			"douban_link": toStringAny(updated["douban_link"], toStringAny(existing["douban_link"], "")),
 			"tmdb_link":   toStringAny(updated["tmdb_link"], toStringAny(existing["tmdb_link"], "")),
@@ -75,11 +74,7 @@ func BuildManualUpdatedSeedRecord(input BuildManualUpdateInput) BuildManualUpdat
 	}
 
 	standardized["team"] = parser.NormalizeTeamKeyForSite(toStringAny(standardized["team"], ""), siteName)
-	if mappedTags, _ := processingtagging.MapTagsToStandard(parseStringArray(standardized["tags"]), siteName); len(mappedTags) > 0 {
-		standardized["tags"] = mappedTags
-	} else {
-		standardized["tags"] = []string{}
-	}
+	standardized["tags"] = NormalizeSeedTagsForReview(standardized["tags"])
 
 	titleComponents := parseAnyArray(updated["title_components"])
 	if len(titleComponents) == 0 {
@@ -102,7 +97,7 @@ func BuildManualUpdatedSeedRecord(input BuildManualUpdateInput) BuildManualUpdat
 	draft := NewSeedDraft(hash, torrentID, siteName, toStringAny(existing["nickname"], siteName))
 	draft.Name = torrentName
 	draft.Title = previewTitle
-	draft.Subtitle = toStringAny(updated["subtitle"], toStringAny(existing["subtitle"], ""))
+	draft.Subtitle = NormalizeSeedSubtitle(toStringAny(updated["subtitle"], toStringAny(existing["subtitle"], "")))
 	draft.IMDbLink = toStringAny(standardized["imdb_link"], toStringAny(existing["imdb_link"], ""))
 	draft.DoubanLink = toStringAny(standardized["douban_link"], toStringAny(existing["douban_link"], ""))
 	draft.TMDbLink = toStringAny(standardized["tmdb_link"], toStringAny(existing["tmdb_link"], ""))
@@ -113,13 +108,13 @@ func BuildManualUpdatedSeedRecord(input BuildManualUpdateInput) BuildManualUpdat
 	draft.Resolution = toStringAny(standardized["resolution"], "")
 	draft.Team = toStringAny(standardized["team"], "")
 	draft.Source = toStringAny(standardized["source"], "")
-	draft.Tags = parseStringArray(standardized["tags"])
+	draft.Tags = NormalizeSeedTagsForReview(standardized["tags"])
 	draft.Poster = toStringAny(updated["poster"], toStringAny(existing["poster"], ""))
 	draft.Screenshots = toStringAny(updated["screenshots"], toStringAny(existing["screenshots"], ""))
 	draft.ScreenshotReviewStatus = screenshotReviewStatus
 	draft.Statement = toStringAny(updated["statement"], toStringAny(existing["statement"], ""))
 	draft.Body = toStringAny(updated["body"], toStringAny(existing["body"], ""))
-	draft.Mediainfo = toStringAny(updated["mediainfo"], toStringAny(existing["mediainfo"], ""))
+	draft.Mediainfo = NormalizeSeedMediaInfo(toStringAny(updated["mediainfo"], toStringAny(existing["mediainfo"], "")))
 	draft.TitleComponents = titleComponentsAnyToMapSlice(titleComponents)
 	draft.RemovedARDTUDeclarations = removedDeclarations
 	draft.IsReviewed = true

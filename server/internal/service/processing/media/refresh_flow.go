@@ -3,12 +3,15 @@ package media
 import (
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/pt-nexus/server/internal/platform/logx"
 	parser "github.com/pt-nexus/server/internal/service/acquire/extract"
 )
+
+var reRefreshMediaInfoExtraBlankLine = regexp.MustCompile(`(?m)^((?:General|Video|Audio|Text(?:\s*#\d+)?|Menu|Chapters))\r?\n\s*\r?\n`)
 
 // RefreshMediainfoRepo 定义媒体刷新流程的最小仓储接口。
 type RefreshMediainfoRepo interface {
@@ -138,7 +141,7 @@ func RefreshMediainfoAsync(payload map[string]any, repo RefreshMediainfoRepo, de
 				}, 200
 			}
 			if probe.Success && strings.TrimSpace(probe.MediaInfo) != "" {
-				mediainfoText := strings.TrimSpace(probe.MediaInfo)
+				mediainfoText := normalizeRefreshedMediaInfo(probe.MediaInfo)
 				seedUpdates, _ := persistMediainfoAndCollectUpdates(seedID, parseErr, repo, deps, hash, torrentID, siteName, savePath, torrentName, mediainfoText, logModule)
 				seedUpdatesValue := any(nil)
 				if len(seedUpdates) > 0 {
@@ -274,10 +277,39 @@ func buildRemotePathCandidates(savePath, torrentName, contentName string) []stri
 	if trimmedSavePath != "" && trimmedContentName != "" && !strings.EqualFold(trimmedContentName, trimmedTorrentName) {
 		candidates = append(candidates, filepath.Join(trimmedSavePath, trimmedContentName))
 	}
-	if trimmedSavePath != "" {
+	if shouldIncludeRemoteSavePath(trimmedSavePath, trimmedTorrentName, trimmedContentName) {
 		candidates = append(candidates, trimmedSavePath)
 	}
 	return candidates
+}
+
+func shouldIncludeRemoteSavePath(savePath, torrentName, contentName string) bool {
+	trimmedSavePath := strings.TrimSpace(savePath)
+	if trimmedSavePath == "" {
+		return false
+	}
+	trimmedTorrentName := strings.TrimSpace(torrentName)
+	trimmedContentName := strings.TrimSpace(contentName)
+	if trimmedTorrentName == "" && trimmedContentName == "" {
+		return true
+	}
+	base := strings.TrimSpace(filepath.Base(trimmedSavePath))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return false
+	}
+	return (trimmedTorrentName != "" && strings.EqualFold(base, trimmedTorrentName)) ||
+		(trimmedContentName != "" && strings.EqualFold(base, trimmedContentName))
+}
+
+func normalizeRefreshedMediaInfo(value string) string {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return ""
+	}
+	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = reRefreshMediaInfoExtraBlankLine.ReplaceAllString(normalized, "$1\n")
+	return strings.TrimSpace(normalized)
 }
 
 func persistMediainfoAndCollectUpdates(
@@ -293,6 +325,7 @@ func persistMediainfoAndCollectUpdates(
 	mediainfoText string,
 	logModule string,
 ) (map[string]any, any) {
+	mediainfoText = normalizeRefreshedMediaInfo(mediainfoText)
 	now := time.Now().Format("2006-01-02 15:04:05")
 	seedUpdates := map[string]any{}
 	if parseErr == nil && repo != nil {

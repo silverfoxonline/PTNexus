@@ -1,6 +1,7 @@
 package migrationflow
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"time"
@@ -114,6 +115,23 @@ func (s *MigrateService) StartPublishBatch(payload map[string]any) (map[string]a
 }
 
 func (s *MigrateService) runPublishBatch(batchID string, payload map[string]any, targets []string, concurrency int) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result := map[string]any{
+				"success": false,
+				"logs":    fmt.Sprintf("批量发布后台任务异常: %v", recovered),
+				"message": fmt.Sprintf("批量发布后台任务异常: %v", recovered),
+			}
+			for _, siteName := range targets {
+				s.publishState.MarkSiteResult(batchID, siteName, result, false)
+				s.publishState.Emit(batchID, map[string]any{"type": "site_finished", "siteName": siteName, "result": result})
+			}
+			s.publishState.Finish(batchID, time.Now())
+			s.publishState.Emit(batchID, map[string]any{"type": "batch_finished"})
+			time.Sleep(80 * time.Millisecond)
+			s.publishState.CloseSubscribers(batchID)
+		}
+	}()
 	publishworkflow.RunManagedBatchPublishFromPayload(
 		publishworkflow.ManagedBatchFromPayloadInput{
 			BatchID:     batchID,

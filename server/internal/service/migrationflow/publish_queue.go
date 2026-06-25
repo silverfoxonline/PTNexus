@@ -13,7 +13,6 @@ import (
 	acquirefetch "github.com/pt-nexus/server/internal/service/acquire/fetch"
 	processingpersist "github.com/pt-nexus/server/internal/service/processing/persist"
 	processingshared "github.com/pt-nexus/server/internal/service/processing/shared"
-	publishguard "github.com/pt-nexus/server/internal/service/publish/guard"
 	publishworkflow "github.com/pt-nexus/server/internal/service/publish/workflow"
 	"gorm.io/gorm"
 )
@@ -720,61 +719,6 @@ func (s *MigrateService) executePublishQueueTask(cfg publishQueueConfig, taskRec
 	payload["targetSite"] = strings.TrimSpace(processingshared.ToString(payload["targetSite"], taskRecord.TargetSite))
 	payload["upload_data"] = uploadData
 	payload = s.normalizePublishPayloadWithCrossSeedDefaults(payload)
-
-	downloaderID := s.resolveQueueTaskDownloaderID(taskRecord, payload, ctx)
-	if strings.TrimSpace(downloaderID) != "" {
-		stats, err := publishguard.CheckDownloaderGateStats(downloaderID)
-		if err != nil {
-			nextRunAt := time.Now().Add(time.Duration(clampInt(cfg.MonitorIntervalSec, 5, 3600)) * time.Second)
-			reason := "预检查统计失败: " + err.Error()
-			_ = s.queueRepo.UpdateTaskAfterRequeue(taskID, nextRunAt, reason, "")
-			if s.publishLogRepo != nil {
-				_ = s.publishLogRepo.UpdateStatusAndLogsByQueueTaskID(taskID, "queued", reason)
-			}
-			logx.Warnf(publishQueueLogModule, "队列任务等待预检查恢复 id=%d downloader_id=%s err=%v", taskID, downloaderID, err)
-			return
-		}
-		if !stats.CanContinue {
-			nextRunAt := time.Now().Add(time.Duration(clampInt(cfg.MonitorIntervalSec, 5, 3600)) * time.Second)
-			reason := strings.TrimSpace(stats.Message)
-			if reason == "" {
-				reason = "已触发限制"
-			}
-			waitMessage := "发布前限制: " + reason
-			_ = s.queueRepo.UpdateTaskAfterRequeue(taskID, nextRunAt, waitMessage, "")
-			if s.publishLogRepo != nil {
-				_ = s.publishLogRepo.UpdateStatusAndLogsByQueueTaskID(taskID, "queued", waitMessage)
-			}
-			logx.Infof(publishQueueLogModule, "队列任务等待限制解除 id=%d downloader_id=%s next_run_at=%s", taskID, downloaderID, nextRunAt.Format(time.RFC3339))
-			return
-		}
-
-		recentOK := false
-		if cfg.TriggerRecentCountBelow > 0 {
-			recentOK = stats.RecentCount < cfg.TriggerRecentCountBelow
-		}
-
-		speedOK := false
-		if cfg.TriggerUploadSpeedBelowMBps > 0 {
-			thresholdBytes := cfg.TriggerUploadSpeedBelowMBps * 1024 * 1024
-			currentSpeed := latestSpeeds[strings.TrimSpace(downloaderID)]
-			speedOK = currentSpeed <= thresholdBytes
-		}
-
-		if cfg.TriggerRecentCountBelow <= 0 && cfg.TriggerUploadSpeedBelowMBps <= 0 {
-			recentOK = true
-		}
-
-		if !recentOK && !speedOK {
-			nextRunAt := time.Now().Add(time.Duration(clampInt(cfg.MonitorIntervalSec, 5, 3600)) * time.Second)
-			reason := "等待触发条件"
-			_ = s.queueRepo.UpdateTaskAfterRequeue(taskID, nextRunAt, reason, "")
-			if s.publishLogRepo != nil {
-				_ = s.publishLogRepo.UpdateStatusAndLogsByQueueTaskID(taskID, "queued", reason)
-			}
-			return
-		}
-	}
 
 	targetSite := strings.TrimSpace(processingshared.ToString(payload["targetSite"], taskRecord.TargetSite))
 	torrentID := strings.TrimSpace(processingshared.ToString(payload["torrent_id"], taskRecord.TorrentID))

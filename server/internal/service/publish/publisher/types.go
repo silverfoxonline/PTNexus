@@ -12,6 +12,7 @@ type PublishInput struct {
 	TargetInfo map[string]any
 
 	UploadData  map[string]any
+	Payload     map[string]any
 	TorrentPath string
 
 	Title       string
@@ -19,7 +20,10 @@ type PublishInput struct {
 	Description string
 	IMDbLink    string
 	DoubanLink  string
-	MediaInfo   string
+	MediaInfo    string
+	SavePath     string
+	DownloaderID string
+	ContentName  string
 
 	SourceSiteNickname      string
 	FindSiteNicknameByGroup func(releaseGroup string) (string, error)

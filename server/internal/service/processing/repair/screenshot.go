@@ -17,7 +17,7 @@ import (
 	processingmedia "github.com/pt-nexus/server/internal/service/processing/media"
 )
 
-const screenshotTotalCount = 5
+const screenshotTotalCount = 4
 
 // GenerateAndUploadScreenshots 从目标媒体自动截帧并上传到 Pixhost，返回可用图片链接列表。
 // 参数/返回：输入包含 payload/source_info/content_name/config，返回去重后的截图 URL。
@@ -137,11 +137,7 @@ func GenerateAndUploadScreenshots(input ScreenshotGenerateInput) ([]string, erro
 			logx.PlainWarnf("错误: 获取视频时长失败: %v", err)
 			return nil, fmt.Errorf("读取视频时长失败: %w", err)
 		}
-		percents := []float64{0.15, 0.30, 0.50, 0.70, 0.85}
-		points = make([]float64, 0, len(percents))
-		for _, p := range percents {
-			points = append(points, duration*p)
-		}
+		points = buildPreviewFallbackPoints(duration, screenshotTotalCount)
 	}
 	sort.Float64s(points)
 
@@ -208,15 +204,13 @@ func GenerateAndUploadScreenshots(input ScreenshotGenerateInput) ([]string, erro
 				}
 				logLine("   🚀 上传成功: %s", showURL)
 
-				finalURL := strings.TrimSpace(showURL)
-				if direct := PixhostShowToDirectURL(showURL); strings.TrimSpace(direct) != "" {
-					if normalized := NormalizePixhostDirectHost(direct); strings.TrimSpace(normalized) != "" {
-						finalURL = normalized
-					} else {
-						finalURL = direct
-					}
+				finalURL, resolveErr := ResolvePixhostImageURL(showURL)
+				if resolveErr != nil || strings.TrimSpace(finalURL) == "" {
+					logLine("   ❌ Pixhost直链解析失败: %v", resolveErr)
+					results <- uploadResult{Index: job.Index, OK: false, LogBlock: buf.String()}
+					continue
 				}
-				results <- uploadResult{Index: job.Index, OK: true, URL: finalURL, LogBlock: buf.String()}
+				results <- uploadResult{Index: job.Index, OK: true, URL: strings.TrimSpace(finalURL), LogBlock: buf.String()}
 			}
 		}()
 	}
@@ -338,10 +332,28 @@ func buildRemotePathCandidatesForProxy(savePath, torrentName, contentName string
 	if trimmedSavePath != "" && trimmedContentName != "" && !strings.EqualFold(trimmedContentName, trimmedTorrentName) {
 		candidates = append(candidates, filepath.Join(trimmedSavePath, trimmedContentName))
 	}
-	if trimmedSavePath != "" {
+	if shouldIncludeRemoteSavePath(trimmedSavePath, trimmedTorrentName, trimmedContentName) {
 		candidates = append(candidates, trimmedSavePath)
 	}
 	return candidates
+}
+
+func shouldIncludeRemoteSavePath(savePath, torrentName, contentName string) bool {
+	trimmedSavePath := strings.TrimSpace(savePath)
+	if trimmedSavePath == "" {
+		return false
+	}
+	trimmedTorrentName := strings.TrimSpace(torrentName)
+	trimmedContentName := strings.TrimSpace(contentName)
+	if trimmedTorrentName == "" && trimmedContentName == "" {
+		return true
+	}
+	base := strings.TrimSpace(filepath.Base(trimmedSavePath))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return false
+	}
+	return (trimmedTorrentName != "" && strings.EqualFold(base, trimmedTorrentName)) ||
+		(trimmedContentName != "" && strings.EqualFold(base, trimmedContentName))
 }
 
 func fileSizeBytes(path string) int64 {

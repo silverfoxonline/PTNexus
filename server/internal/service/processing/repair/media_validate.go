@@ -136,7 +136,7 @@ func ValidateMediaPayload(payload map[string]any, rootConfig map[string]any, csp
 			typeOverride = "category.animation"
 		}
 		// 从新获取的简介文本提取产地，用于前端同步修正标准化产地键（不落库）。
-		sourceOverride := strings.TrimSpace(parser.InferSourceFromDescription(result.Intro))
+		sourceOverride := firstNonEmpty(strings.TrimSpace(result.Source), strings.TrimSpace(parser.InferSourceFromDescription(result.Intro)))
 		return map[string]any{
 			"success":               true,
 			"intro":                 result.Intro,

@@ -41,6 +41,8 @@ func Publish(input publisher.PublishInput) (publisher.PublishResult, error) {
 		return publishsites.PublishHdfans(input)
 	case "crabpt":
 		return publishsites.PublishCrabPT(input)
+	case "ssd":
+		return publishsites.PublishSSD(input)
 	default:
 		return publisher.PublishPublic(input)
 	}

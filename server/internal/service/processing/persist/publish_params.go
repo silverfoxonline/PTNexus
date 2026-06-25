@@ -38,7 +38,7 @@ func BuildStandardizedParams(row map[string]any) map[string]any {
 		"resolution":  toStringAny(row["resolution"], ""),
 		"team":        parser.NormalizeTeamKey(toStringAny(row["team"], "")),
 		"source":      toStringAny(row["source"], ""),
-		"tags":        parseStringArray(row["tags"]),
+		"tags":        NormalizeSeedTagsForReview(row["tags"]),
 		"imdb_link":   toStringAny(row["imdb_link"], ""),
 		"douban_link": toStringAny(row["douban_link"], ""),
 		"tmdb_link":   toStringAny(row["tmdb_link"], ""),
@@ -50,7 +50,7 @@ func BuildFinalPublishParameters(row map[string]any) map[string]any {
 	standardized := BuildStandardizedParams(row)
 	return map[string]any{
 		"主标题 (预览)": toStringAny(row["title"], ""),
-		"副标题":      toStringAny(row["subtitle"], ""),
+		"副标题":      NormalizeSeedSubtitle(toStringAny(row["subtitle"], "")),
 		"IMDb链接":   standardized["imdb_link"],
 		"豆瓣链接":     standardized["douban_link"],
 		"TMDb链接":   standardized["tmdb_link"],
@@ -69,7 +69,7 @@ func BuildFinalPublishParameters(row map[string]any) map[string]any {
 func BuildCompletePublishParams(row map[string]any) map[string]any {
 	return map[string]any{
 		"title_components": row["title_components"],
-		"subtitle":         row["subtitle"],
+		"subtitle":         NormalizeSeedSubtitle(toStringAny(row["subtitle"], "")),
 		"imdb_link":        row["imdb_link"],
 		"douban_link":      row["douban_link"],
 		"tmdb_link":        row["tmdb_link"],
@@ -80,7 +80,7 @@ func BuildCompletePublishParams(row map[string]any) map[string]any {
 			"screenshots":               row["screenshots"],
 			"removed_ardtudeclarations": row["removed_ardtudeclarations"],
 		},
-		"mediainfo":           row["mediainfo"],
+		"mediainfo":           NormalizeSeedMediaInfo(toStringAny(row["mediainfo"], "")),
 		"standardized_params": BuildStandardizedParams(row),
 	}
 }
@@ -90,7 +90,7 @@ func BuildRawPreviewParams(row map[string]any) map[string]any {
 	standardized := BuildStandardizedParams(row)
 	return map[string]any{
 		"final_main_title": toStringAny(row["title"], ""),
-		"subtitle":         toStringAny(row["subtitle"], ""),
+		"subtitle":         NormalizeSeedSubtitle(toStringAny(row["subtitle"], "")),
 		"imdb_link":        standardized["imdb_link"],
 		"douban_link":      standardized["douban_link"],
 		"tmdb_link":        standardized["tmdb_link"],

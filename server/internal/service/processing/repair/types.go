@@ -7,6 +7,7 @@ type MovieInfoResult struct {
 	IMDb   string
 	Douban string
 	TMDb   string
+	Source string
 }
 
 // ScreenshotGenerateInput 描述截图自动生成与上传所需的输入参数。

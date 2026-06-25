@@ -15,7 +15,10 @@ import (
 	publishuploader "github.com/pt-nexus/server/internal/service/publish/uploader"
 )
 
-var publishTitleBitDepthPattern = regexp.MustCompile(`(?i)\b(?:8|10|12|16|24)bit\b`)
+var (
+	publishTitleBitDepthPattern = regexp.MustCompile(`(?i)\b(?:8|10|12|16|24)bit\b`)
+	publishAudiencesRatingTail  = regexp.MustCompile(`\s+(?:\d+(?:\.\d+)?\s*/\s*10\s*){1,2}(?:\d+\s*%\s*)?(?:\d+\s*/\s*100\s*)?$`)
+)
 
 // PublishTorrentToTarget 将种子文件发布到目标站点，并返回发布 URL 与日志文案。
 // 参数/返回：targetInfo 为目标站配置，uploadData 为发布字段，torrentPath 为本地种子路径。
@@ -24,8 +27,11 @@ var publishTitleBitDepthPattern = regexp.MustCompile(`(?i)\b(?:8|10|12|16|24)bit
 func PublishTorrentToTarget(
 	targetInfo map[string]any,
 	uploadData map[string]any,
+	payload map[string]any,
 	torrentPath string,
 	sourceSiteNickname string,
+	savePath string,
+	downloaderID string,
 	findSiteNicknameByGroup func(releaseGroup string) (string, error),
 ) (string, string, string, bool, map[string]string, error) {
 	targetName := strings.TrimSpace(toStringAny(targetInfo["nickname"], toStringAny(targetInfo["site"], "目标站点")))
@@ -45,10 +51,26 @@ func PublishTorrentToTarget(
 	cookie := strings.TrimSpace(toStringAny(targetInfo["cookie"], ""))
 
 	title := resolvePublishMainTitle(siteCode, uploadData, torrentPath)
-	subtitle := strings.TrimSpace(toStringAny(uploadData["subtitle"], ""))
-	description := publishuploader.BuildUploadDescription(siteCode, uploadData)
+	subtitle := normalizePublishSubtitle(toStringAny(uploadData["subtitle"], ""))
+	if subtitle != strings.TrimSpace(toStringAny(uploadData["subtitle"], "")) {
+		uploadData["subtitle"] = subtitle
+		appendLog("副标题已规范化：替换【】并移除末尾评分字段")
+	}
 	imdbLink, doubanLink := resolvePublishExternalLinks(uploadData)
 	mediainfo := strings.TrimSpace(toStringAny(uploadData["mediainfo"], ""))
+	prepared, prepareErr := preparePublishMediaForTarget(uploadData, payload, torrentPath, savePath, downloaderID, mediainfo)
+	if prepareErr != nil {
+		appendLog(fmt.Sprintf("发布前媒体处理失败: %v", prepareErr))
+		appendLog("--- [步骤2] 任务执行完毕 ---")
+		return "", "", strings.Join(logLines, "\n"), false, nil, prepareErr
+	}
+	for _, line := range prepared.Logs {
+		appendLog(line)
+	}
+	if strings.TrimSpace(prepared.MediaInfo) != "" {
+		mediainfo = strings.TrimSpace(prepared.MediaInfo)
+	}
+	description := publishuploader.BuildUploadDescription(siteCode, uploadData)
 
 	pubInput := publishpublisher.PublishInput{
 		TargetName: targetName,
@@ -58,6 +80,7 @@ func PublishTorrentToTarget(
 		TargetInfo: targetInfo,
 
 		UploadData:  uploadData,
+		Payload:     payload,
 		TorrentPath: strings.TrimSpace(torrentPath),
 
 		Title:       title,
@@ -66,6 +89,12 @@ func PublishTorrentToTarget(
 		IMDbLink:    imdbLink,
 		DoubanLink:  doubanLink,
 		MediaInfo:   mediainfo,
+		SavePath:    strings.TrimSpace(savePath),
+		DownloaderID: strings.TrimSpace(downloaderID),
+		ContentName: strings.TrimSpace(firstNonEmpty(
+			toStringAny(uploadData["content_name"], ""),
+			toStringAny(uploadData["contentName"], ""),
+		)),
 
 		SourceSiteNickname:      strings.TrimSpace(sourceSiteNickname),
 		FindSiteNicknameByGroup: findSiteNicknameByGroup,
@@ -104,7 +133,7 @@ func resolvePublishMainTitle(siteCode string, uploadData map[string]any, torrent
 		baseTitle = strings.TrimSpace(toStringAny(uploadData["name"], filepath.Base(torrentPath)))
 	}
 	if !strings.EqualFold(strings.TrimSpace(siteCode), "qingwapt") {
-		return baseTitle
+		return normalizePublishTitleForSite(siteCode, baseTitle)
 	}
 
 	titleComponents := parsePublishTitleComponents(uploadData["title_components"])
@@ -116,9 +145,20 @@ func resolvePublishMainTitle(siteCode string, uploadData map[string]any, torrent
 	filtered := filterPublishTitleComponents(completed, "色深")
 	rebuilt := strings.TrimSpace(processingtitle.BuildPreviewTitleFromTitleComponents(filtered, baseTitle))
 	if rebuilt == "" || rebuilt == "-NOGROUP" {
-		return stripPublishTitleBitDepth(baseTitle)
+		return normalizePublishTitleForSite(siteCode, stripPublishTitleBitDepth(baseTitle))
 	}
-	return rebuilt
+	return normalizePublishTitleForSite(siteCode, rebuilt)
+}
+
+func normalizePublishTitleForSite(siteCode string, title string) string {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(siteCode), "ssd") {
+		return trimmed
+	}
+	return strings.Trim(strings.Join(strings.Fields(trimmed), "."), ".")
 }
 
 // parsePublishTitleComponents 将发布 payload 中的 title_components 统一转换为 []any。
@@ -199,6 +239,17 @@ func stripPublishTitleBitDepth(title string) string {
 	}
 	stripped := publishTitleBitDepthPattern.ReplaceAllString(trimmed, " ")
 	return strings.Join(strings.Fields(stripped), " ")
+}
+
+func normalizePublishSubtitle(subtitle string) string {
+	trimmed := strings.TrimSpace(subtitle)
+	if trimmed == "" {
+		return trimmed
+	}
+	trimmed = strings.ReplaceAll(trimmed, "【", "[")
+	trimmed = strings.ReplaceAll(trimmed, "】", "]")
+	trimmed = strings.TrimSpace(publishAudiencesRatingTail.ReplaceAllString(trimmed, ""))
+	return trimmed
 }
 
 func toStringAny(value any, fallback string) string {

@@ -751,7 +751,7 @@ const showScreenshotPreviewDialog = ref(false)
 const screenshotPreviewCandidates = ref<ScreenshotPreviewCandidateItem[]>([])
 const activeScreenshotPreviewId = ref('')
 const selectedScreenshotPreviewIds = ref<string[]>([])
-const screenshotPreviewSelectionLimit = ref(5)
+const screenshotPreviewSelectionLimit = ref(4)
 const screenshotPreviewSubtitleState = ref<ScreenshotSubtitleState>('no_usable_subtitle')
 const screenshotPreviewSubtitleStreams = ref<ScreenshotPreviewSubtitleStreamItem[]>([])
 const currentScreenshotPreviewSubtitleSID = ref(0)
@@ -1024,7 +1024,7 @@ const buildScreenshotPreviewDialogMessage = (subtitleState: ScreenshotSubtitleSt
     case 'confirmed_chinese':
       return '已定位到明确的中文字幕流，可直接挑选更合适的时间点。'
     default:
-      return '当前未检测到可用字幕流，请直接在候选列表中选择 5 张截图。'
+      return `当前未检测到可用字幕流，请直接在候选列表中选择 ${screenshotPreviewSelectionLimit.value} 张截图。`
   }
 }
 
@@ -1053,7 +1053,7 @@ const setScreenshotPreviewBundle = (
   screenshotPreviewCandidates.value = candidates
   activeScreenshotPreviewId.value = candidates[0]?.id || ''
   selectedScreenshotPreviewIds.value = []
-  screenshotPreviewSelectionLimit.value = selectionLimit > 0 ? selectionLimit : 5
+  screenshotPreviewSelectionLimit.value = selectionLimit > 0 ? selectionLimit : 4
   screenshotPreviewSubtitleState.value = subtitleState
   screenshotPreviewSubtitleStreams.value = subtitleStreams
   currentScreenshotPreviewSubtitleSID.value = currentSubtitleSID
@@ -1081,7 +1081,7 @@ const applyScreenshotPreviewCandidates = (
 ) => {
   const candidates = normalizeScreenshotPreviewCandidates(rawCandidates)
   const selectionLimit =
-    typeof rawSelectionLimit === 'number' ? rawSelectionLimit : Number(rawSelectionLimit || 5)
+    typeof rawSelectionLimit === 'number' ? rawSelectionLimit : Number(rawSelectionLimit || 4)
   if (candidates.length === 0) {
     return false
   }
@@ -1228,7 +1228,7 @@ const resetScreenshotPreviewState = () => {
   screenshotPreviewCandidates.value = []
   activeScreenshotPreviewId.value = ''
   selectedScreenshotPreviewIds.value = []
-  screenshotPreviewSelectionLimit.value = 5
+  screenshotPreviewSelectionLimit.value = 4
   screenshotPreviewSubtitleState.value = 'no_usable_subtitle'
   screenshotPreviewSubtitleStreams.value = []
   currentScreenshotPreviewSubtitleSID.value = 0
