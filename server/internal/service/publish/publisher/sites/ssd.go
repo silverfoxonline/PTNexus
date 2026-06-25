@@ -18,6 +18,7 @@ import (
 const ssdPublishLogModule = "publish-ssd"
 
 var reSSDEpisodeOne = regexp.MustCompile(`(?i)(?:^|[ ._\-\[\(])(?:s\d{1,2})?e0?1(?:[ ._\-\]\)]|$)`)
+var reSSDSeasonOnly = regexp.MustCompile(`(?i)(?:^|[ ._\-\[\(])s\d{1,2}(?:[ ._\-\]\)]|$)`)
 var reSSDMediaInfoExtraBlankLine = regexp.MustCompile(`(?m)^((?:General|Video|Audio|Text(?:\s*#\d+)?|Menu|Chapters))\r?\n\s*\r?\n`)
 
 type ssdPublisher struct {
@@ -33,7 +34,7 @@ func (ssdPublisher) LogModule() string {
 }
 
 func (ssdPublisher) AttemptPrefix(input publisher.PublishInput) string {
-	return "Detected CMCT target: using direct PNG screenshot URLs, preserved extra description, and refreshed MediaInfo when available."
+	return "Detected CMCT target: using direct PNG screenshot URLs, preserved extra description, and preview MediaInfo."
 }
 
 func (ssdPublisher) BuildDescription(input publisher.PublishInput) string {
@@ -87,6 +88,12 @@ func (ssdPublisher) AdjustFormFields(input publisher.PublishInput, formFields ma
 	delete(formFields, "team_sel")
 	removeFormFieldsByPrefix(formFields, "tags[")
 	applySSDTagCheckboxes(input.UploadData, formFields)
+	if isSSDSeries(input) {
+		formFields["type"] = "502"
+		if isSSDSeriesPack(input) {
+			formFields["pack"] = "1"
+		}
+	}
 	if mediaInfo := strings.TrimSpace(formFields["Media_BDInfo"]); mediaInfo != "" {
 		formFields["Media_BDInfo"] = normalizeSSDMediaInfo(mediaInfo)
 	}
@@ -153,7 +160,7 @@ func applySSDTagCheckboxes(uploadData map[string]any, formFields map[string]stri
 	}
 	setIfAnyTag("animation", "tag.动画", "动画")
 	setIfAnyTag("exclusive", "tag.禁转", "禁转")
-	setIfAnyTag("pack", "tag.合集", "tag.完结", "合集", "完结")
+	setIfAnyTag("pack", "tag.合集", "tag.完结", "合集", "完结", "全集")
 	setIfAnyTag("untouched", "tag.原生", "原生")
 	setIfAnyTag("mandarin", "tag.国配", "tag.国语", "国配", "国语")
 	setIfAnyTag("subtitlezh", "tag.中字", "中字")
@@ -278,6 +285,9 @@ func normalizeSSDImageURL(raw string) string {
 
 func resolveSSDMediaInfo(input publisher.PublishInput) (string, error) {
 	fallback := strings.TrimSpace(input.MediaInfo)
+	if fallback != "" {
+		return fallback, nil
+	}
 	savePath := strings.TrimSpace(input.SavePath)
 	if savePath == "" {
 		return fallback, fmt.Errorf("missing save path")
@@ -290,7 +300,7 @@ func resolveSSDMediaInfo(input publisher.PublishInput) (string, error) {
 		))
 	}
 	if isSSDSeries(input) {
-		episodePath, err := findSSDEpisodeOnePath(savePath, torrentName)
+		episodePath, err := findSSDEpisodeOnePath(savePath, torrentName, strings.TrimSpace(input.ContentName))
 		if err != nil {
 			return fallback, err
 		}
@@ -342,7 +352,7 @@ func isSSDSeries(input publisher.PublishInput) bool {
 		if lower == "" {
 			continue
 		}
-		if strings.Contains(lower, "tv_series") || strings.Contains(lower, "tv series") || strings.Contains(lower, "series") {
+		if strings.Contains(lower, "tv_series") || strings.Contains(lower, "tv series") || strings.Contains(lower, "series") || strings.Contains(value, "剧集") || strings.Contains(value, "电视剧") {
 			return true
 		}
 		if strings.Contains(lower, "s01") || strings.Contains(lower, "s02") || strings.Contains(lower, "e01") {
@@ -352,11 +362,41 @@ func isSSDSeries(input publisher.PublishInput) bool {
 	return false
 }
 
-func findSSDEpisodeOnePath(savePath string, torrentName string) (string, error) {
-	roots := []string{savePath}
-	if strings.TrimSpace(torrentName) != "" {
-		roots = append([]string{filepath.Join(savePath, torrentName)}, roots...)
+func isSSDSeriesPack(input publisher.PublishInput) bool {
+	if !isSSDSeries(input) {
+		return false
 	}
+	values := []string{
+		strings.TrimSpace(input.Title),
+		strings.TrimSpace(input.Subtitle),
+		strings.TrimSpace(input.ContentName),
+		toStringAny(input.UploadData["name"], ""),
+		toStringAny(input.UploadData["title"], ""),
+	}
+	if standardized, ok := input.UploadData["standardized_params"].(map[string]any); ok && standardized != nil {
+		values = append(values, parseFlexibleStringArray(standardized["tags"])...)
+	}
+	if sourceParams, ok := input.UploadData["source_params"].(map[string]any); ok && sourceParams != nil {
+		for _, value := range sourceParams {
+			values = append(values, toStringAny(value, ""))
+		}
+	}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		lower := strings.ToLower(trimmed)
+		if strings.Contains(trimmed, "合集") || strings.Contains(trimmed, "完结") || strings.Contains(trimmed, "全集") ||
+			strings.Contains(lower, "complete") || strings.Contains(lower, "pack") {
+			return true
+		}
+		if reSSDSeasonOnly.MatchString(trimmed) && !reSSDEpisodeOne.MatchString(trimmed) {
+			return true
+		}
+	}
+	return false
+}
+
+func findSSDEpisodeOnePath(savePath string, torrentName string, contentName string) (string, error) {
+	roots := buildSSDScopedMediaRoots(savePath, torrentName, contentName)
 	candidates := make([]string, 0)
 	for _, root := range roots {
 		root = strings.TrimSpace(root)
@@ -399,6 +439,44 @@ func findSSDEpisodeOnePath(savePath string, torrentName string) (string, error) 
 		return sizeI > sizeJ
 	})
 	return candidates[0], nil
+}
+
+func buildSSDScopedMediaRoots(savePath string, torrentName string, contentName string) []string {
+	roots := make([]string, 0, 3)
+	seen := map[string]struct{}{}
+	appendRoot := func(path string) {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			return
+		}
+		if _, exists := seen[trimmed]; exists {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		roots = append(roots, trimmed)
+	}
+
+	trimmedSavePath := strings.TrimSpace(savePath)
+	trimmedTorrentName := strings.TrimSpace(torrentName)
+	trimmedContentName := strings.TrimSpace(contentName)
+	if trimmedSavePath == "" {
+		return roots
+	}
+	if trimmedTorrentName != "" {
+		appendRoot(filepath.Join(trimmedSavePath, trimmedTorrentName))
+	}
+	if trimmedContentName != "" && !strings.EqualFold(trimmedContentName, trimmedTorrentName) {
+		appendRoot(filepath.Join(trimmedSavePath, trimmedContentName))
+	}
+	baseName := strings.TrimSpace(filepath.Base(trimmedSavePath))
+	if trimmedTorrentName == "" && trimmedContentName == "" {
+		appendRoot(trimmedSavePath)
+	} else if strings.EqualFold(baseName, trimmedTorrentName) || strings.EqualFold(baseName, trimmedContentName) {
+		appendRoot(trimmedSavePath)
+	} else if info, err := os.Stat(trimmedSavePath); err == nil && !info.IsDir() {
+		appendRoot(trimmedSavePath)
+	}
+	return roots
 }
 
 func isSSDMediaPath(path string) bool {

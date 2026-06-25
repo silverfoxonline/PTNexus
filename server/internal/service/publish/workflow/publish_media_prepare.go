@@ -36,6 +36,9 @@ func preparePublishMediaForTarget(uploadData map[string]any, payload map[string]
 	if !isPublishSeries(uploadData, payload) {
 		return result, nil
 	}
+	if strings.TrimSpace(result.MediaInfo) != "" {
+		return result, nil
+	}
 	mediaInfo, mediaErr := preparePublishEpisodeOneMediaInfo(uploadData, payload, savePath)
 	if mediaErr != nil {
 		return result, mediaErr
@@ -107,7 +110,12 @@ func preparePublishEpisodeOneMediaInfo(uploadData map[string]any, payload map[st
 		toStringAny(uploadData["name"], ""),
 		toStringAny(uploadData["title"], ""),
 	))
-	episodePath, err := findPublishEpisodeOnePath(trimmedSavePath, torrentName)
+	contentName := strings.TrimSpace(firstNonEmpty(
+		firstPublishPayloadString(payload, "content_name", "contentName"),
+		toStringAny(uploadData["content_name"], ""),
+		toStringAny(uploadData["contentName"], ""),
+	))
+	episodePath, err := findPublishEpisodeOnePath(trimmedSavePath, torrentName, contentName)
 	if err != nil {
 		return "", fmt.Errorf("剧集重新提取 E01 MediaInfo 失败: %w", err)
 	}
@@ -155,11 +163,8 @@ func isPublishSeries(uploadData map[string]any, payload map[string]any) bool {
 	return false
 }
 
-func findPublishEpisodeOnePath(savePath string, torrentName string) (string, error) {
-	roots := []string{savePath}
-	if strings.TrimSpace(torrentName) != "" {
-		roots = append([]string{filepath.Join(savePath, torrentName)}, roots...)
-	}
+func findPublishEpisodeOnePath(savePath string, torrentName string, contentName string) (string, error) {
+	roots := buildPublishScopedMediaRoots(savePath, torrentName, contentName)
 	candidates := make([]string, 0)
 	for _, root := range roots {
 		root = strings.TrimSpace(root)
@@ -202,6 +207,44 @@ func findPublishEpisodeOnePath(savePath string, torrentName string) (string, err
 		return sizeI > sizeJ
 	})
 	return candidates[0], nil
+}
+
+func buildPublishScopedMediaRoots(savePath string, torrentName string, contentName string) []string {
+	roots := make([]string, 0, 3)
+	seen := map[string]struct{}{}
+	appendRoot := func(path string) {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			return
+		}
+		if _, exists := seen[trimmed]; exists {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		roots = append(roots, trimmed)
+	}
+
+	trimmedSavePath := strings.TrimSpace(savePath)
+	trimmedTorrentName := strings.TrimSpace(torrentName)
+	trimmedContentName := strings.TrimSpace(contentName)
+	if trimmedSavePath == "" {
+		return roots
+	}
+	if trimmedTorrentName != "" {
+		appendRoot(filepath.Join(trimmedSavePath, trimmedTorrentName))
+	}
+	if trimmedContentName != "" && !strings.EqualFold(trimmedContentName, trimmedTorrentName) {
+		appendRoot(filepath.Join(trimmedSavePath, trimmedContentName))
+	}
+	baseName := strings.TrimSpace(filepath.Base(trimmedSavePath))
+	if trimmedTorrentName == "" && trimmedContentName == "" {
+		appendRoot(trimmedSavePath)
+	} else if strings.EqualFold(baseName, trimmedTorrentName) || strings.EqualFold(baseName, trimmedContentName) {
+		appendRoot(trimmedSavePath)
+	} else if info, err := os.Stat(trimmedSavePath); err == nil && !info.IsDir() {
+		appendRoot(trimmedSavePath)
+	}
+	return roots
 }
 
 func isPublishMediaPath(path string) bool {
