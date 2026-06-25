@@ -285,9 +285,6 @@ func normalizeSSDImageURL(raw string) string {
 
 func resolveSSDMediaInfo(input publisher.PublishInput) (string, error) {
 	fallback := strings.TrimSpace(input.MediaInfo)
-	if fallback != "" {
-		return fallback, nil
-	}
 	savePath := strings.TrimSpace(input.SavePath)
 	if savePath == "" {
 		return fallback, fmt.Errorf("missing save path")

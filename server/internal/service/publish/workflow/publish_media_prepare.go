@@ -36,11 +36,12 @@ func preparePublishMediaForTarget(uploadData map[string]any, payload map[string]
 	if !isPublishSeries(uploadData, payload) {
 		return result, nil
 	}
-	if strings.TrimSpace(result.MediaInfo) != "" {
-		return result, nil
-	}
 	mediaInfo, mediaErr := preparePublishEpisodeOneMediaInfo(uploadData, payload, savePath)
 	if mediaErr != nil {
+		if strings.TrimSpace(result.MediaInfo) != "" {
+			result.Logs = append(result.Logs, "剧集 E01 MediaInfo 提取失败，保留预览 MediaInfo: "+mediaErr.Error())
+			return result, nil
+		}
 		return result, mediaErr
 	}
 	if strings.TrimSpace(mediaInfo) != "" {
