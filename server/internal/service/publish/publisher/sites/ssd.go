@@ -115,6 +115,8 @@ func hasSSDChineseSubtitle(uploadData map[string]any) bool {
 	for _, token := range []string{
 		"\u4e2d\u5b57",
 		"\u4e2d\u6587\u5b57\u5e55",
+		"\u7b80",
+		"\u7e41",
 		"\u7b80\u4f53",
 		"\u7e41\u4f53",
 		"\u7b80\u7e41",

@@ -299,6 +299,7 @@ func (d Downloader) AddTorrentURLWithOptions(torrentURL, savePath string, option
 		}
 		values.Set("paused", strconv.FormatBool(options.Paused))
 		values.Set("skip_checking", "true")
+		values.Set("autoTMM", "true")
 		if len(options.Tags) > 0 {
 			values.Set("tags", strings.Join(compactStrings(options.Tags), ","))
 		}
@@ -371,6 +372,7 @@ func (d Downloader) AddTorrentDataWithOptions(content []byte, fileName, savePath
 		}
 		_ = writer.WriteField("paused", strconv.FormatBool(options.Paused))
 		_ = writer.WriteField("skip_checking", "true")
+		_ = writer.WriteField("autoTMM", "true")
 		if len(options.Tags) > 0 {
 			_ = writer.WriteField("tags", strings.Join(compactStrings(options.Tags), ","))
 		}

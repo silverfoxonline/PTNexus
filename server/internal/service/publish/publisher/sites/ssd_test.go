@@ -35,3 +35,22 @@ func TestSSDSeriesPackDoesNotMatchSingleEpisode(t *testing.T) {
 		t.Fatal("single episode should not be treated as CMCT pack")
 	}
 }
+
+func TestSSDTagCheckboxesUseSourceTagsForChineseSubtitle(t *testing.T) {
+	fields := map[string]string{}
+	applySSDTagCheckboxes(map[string]any{
+		"standardized_params": map[string]any{
+			"tags": []string{"tag.中字"},
+		},
+	}, fields)
+
+	if fields["subtitlezh"] != "1" {
+		t.Fatalf("expected CMCT Chinese subtitle checkbox to be selected, got %#v", fields)
+	}
+}
+
+func TestSSDChineseSubtitleFromShortAudiencesSubtitle(t *testing.T) {
+	if !hasSSDChineseSubtitle(map[string]any{"subtitle": "渚 [简|繁|英字幕]"}) {
+		t.Fatal("expected short Audiences subtitle marker to be treated as Chinese subtitle")
+	}
+}
