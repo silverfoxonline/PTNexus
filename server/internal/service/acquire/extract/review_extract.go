@@ -2325,10 +2325,10 @@ func inferStandardizedValues(title, mediainfo, body string) map[string]string {
 		values["medium"] = "medium.dvdr"
 	case hasTech("UHD", "ULTRA HD"):
 		values["medium"] = "medium.uhd_bluray"
-	case hasTech("BLURAY", "BLU-RAY", "BDMV", "BD25", "BD50", "BD66", "BD100"):
-		values["medium"] = "medium.bluray"
 	case hasTech("BDRIP", "BD-RIP", "BD RIP"):
 		values["medium"] = "medium.bdrip"
+	case hasTech("BLURAY", "BLU-RAY", "BDMV", "BD25", "BD50", "BD66", "BD100"):
+		values["medium"] = "medium.bluray"
 	case hasTech("WEB-DL", "WEBDL"):
 		values["medium"] = "medium.webdl"
 	case hasTech("WEBRIP"):

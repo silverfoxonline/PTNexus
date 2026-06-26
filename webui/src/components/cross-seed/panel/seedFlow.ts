@@ -110,6 +110,11 @@ type DbSeedInfoResponse = {
   data?: DbSeedRecord
 }
 
+type MediaRefreshSeedUpdates = {
+  standardized_params?: Partial<TorrentData['standardized_params']>
+  inferred_standardized_params?: Partial<TorrentData['standardized_params']>
+}
+
 export function createSeedFlow(deps: SeedFlowDeps): SeedFlowApi {
   const {
     sourceSite,
@@ -989,6 +994,87 @@ export function createSeedFlow(deps: SeedFlowDeps): SeedFlowApi {
     }
   }
 
+  const applyMediainfoSeedUpdates = (seedUpdates: unknown) => {
+    if (!seedUpdates || typeof seedUpdates !== 'object') return
+    const updates = seedUpdates as MediaRefreshSeedUpdates
+
+    const standardized = updates.standardized_params
+    if (standardized && typeof standardized === 'object') {
+      if (typeof standardized.medium === 'string' && standardized.medium.trim() !== '') {
+        torrentData.value.standardized_params.medium = standardized.medium.trim()
+      }
+      if (typeof standardized.type === 'string' && standardized.type.trim() !== '') {
+        torrentData.value.standardized_params.type = standardized.type.trim()
+      }
+      if (Array.isArray(standardized.tags) && standardized.tags.length > 0) {
+        const merged = [
+          ...new Set([
+            ...(torrentData.value.standardized_params.tags || []),
+            ...standardized.tags,
+          ]),
+        ]
+          .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+          .filter((tag) => tag !== '')
+        torrentData.value.standardized_params.tags = merged
+      }
+    }
+
+    const inferred = updates.inferred_standardized_params
+    if (inferred && typeof inferred === 'object') {
+      ;(['video_codec', 'audio_codec', 'resolution'] as const).forEach((key) => {
+        const candidate = typeof inferred[key] === 'string' ? inferred[key].trim() : ''
+        if (!candidate || candidate.endsWith('.other')) return
+        torrentData.value.standardized_params[key] = candidate
+      })
+    }
+  }
+
+  const isLikelyBDInfoForPreview = (text: string): boolean => {
+    const upper = text.trim().toUpperCase()
+    return (
+      upper.includes('DISC INFO:') ||
+      upper.includes('PLAYLIST REPORT:') ||
+      upper.includes('QUICK SUMMARY:') ||
+      upper.includes('DISC TITLE:')
+    )
+  }
+
+  const refreshMediainfoForPreview = async () => {
+    const currentTorrent = torrent.value
+    const seedId = torrentData.value.seed_id
+    if (!currentTorrent || !seedId) return
+    if (isLikelyBDInfoForPreview(torrentData.value.mediainfo || '')) return
+
+    const response = await axios.post('/api/migrate/refresh_mediainfo_async', {
+      seed_id: seedId,
+      save_path: currentTorrent.save_path,
+      content_name: torrentData.value.original_main_title,
+      downloader_id: currentTorrent.downloaderId,
+      torrent_name: currentTorrent.name,
+      current_mediainfo: torrentData.value.mediainfo,
+      force_refresh: true,
+      priority: 1,
+    })
+
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || 'MediaInfo refresh failed before preview.')
+    }
+
+    if (response.data.mediainfo) {
+      torrentData.value.mediainfo = response.data.mediainfo
+    }
+    applyMediainfoSeedUpdates(response.data.seed_updates)
+
+    if (response.data.bdinfo_async?.bdinfo_status === 'processing') {
+      checkAndStartBDInfoProgress(seedId, false)
+      throw new Error('BDInfo is processing. Please open the preview again after it completes.')
+    }
+
+    if (!response.data.mediainfo && !torrentData.value.mediainfo) {
+      throw new Error('No refreshed MediaInfo was returned for the preview.')
+    }
+  }
+
   const goToPublishPreviewStep = async () => {
     // 打印从store获取的已存在站点信息
     console.log('=== 从store获取的已存在站点信息 ===')
@@ -1106,6 +1192,8 @@ export function createSeedFlow(deps: SeedFlowDeps): SeedFlowApi {
       })
 
       // 构建更新的参数，应用空行过滤
+      await refreshMediainfoForPreview()
+
       const updatedParameters = {
         title: torrentData.value.original_main_title,
         subtitle: torrentData.value.subtitle,

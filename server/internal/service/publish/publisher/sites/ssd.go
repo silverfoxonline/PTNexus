@@ -137,6 +137,7 @@ func normalizeSSDMediaInfo(text string) string {
 	if trimmed == "" {
 		return ""
 	}
+	trimmed = processingmedia.NormalizeMediaInfoCompleteName(trimmed)
 	return strings.TrimSpace(reSSDMediaInfoExtraBlankLine.ReplaceAllString(trimmed, "$1\n"))
 }
 
@@ -176,6 +177,40 @@ func applySSDTagCheckboxes(uploadData map[string]any, formFields map[string]stri
 	setIfAnyTag("hlg", "tag.HLG", "HLG")
 	setIfAnyTag("cc", "tag.cc", "CC")
 	setIfAnyTag("3d", "tag.3d", "3D")
+	if isSSDAnimationRelated(uploadData) {
+		formFields["animation"] = "1"
+	}
+}
+
+func isSSDAnimationRelated(uploadData map[string]any) bool {
+	if uploadData == nil {
+		return false
+	}
+	values := []string{
+		toStringAny(uploadData["title"], ""),
+		toStringAny(uploadData["name"], ""),
+		toStringAny(uploadData["subtitle"], ""),
+	}
+	if standardized, ok := uploadData["standardized_params"].(map[string]any); ok && standardized != nil {
+		values = append(values, toStringAny(standardized["type"], ""), toStringAny(standardized["category"], ""))
+	}
+	if intro, ok := uploadData["intro"].(map[string]any); ok && intro != nil {
+		values = append(values, toStringAny(intro["body"], ""), toStringAny(intro["statement"], ""))
+	}
+	for _, value := range values {
+		lower := strings.ToLower(strings.TrimSpace(value))
+		if lower == "" {
+			continue
+		}
+		if strings.Contains(lower, "category.animation") ||
+			strings.Contains(lower, "animation") ||
+			strings.Contains(lower, "anime") ||
+			strings.Contains(value, "动画") ||
+			strings.Contains(value, "动漫") {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveSSDScreenshotURLs(input publisher.PublishInput) ([]string, error) {

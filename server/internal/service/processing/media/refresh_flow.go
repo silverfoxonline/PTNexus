@@ -308,6 +308,7 @@ func normalizeRefreshedMediaInfo(value string) string {
 	}
 	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = NormalizeMediaInfoCompleteName(normalized)
 	normalized = reRefreshMediaInfoExtraBlankLine.ReplaceAllString(normalized, "$1\n")
 	return strings.TrimSpace(normalized)
 }

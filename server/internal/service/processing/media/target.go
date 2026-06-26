@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
+	"regexp"
 	"strings"
 )
+
+var reMediaInfoCompleteNameLine = regexp.MustCompile(`(?i)^(\s*Complete\s+name\s*:\s*)(.*?)(\s*)$`)
 
 // PickMediaTarget 从保存路径中选择一个可用于提取媒体信息/截图的目标文件。
 // 参数/返回：支持传入文件路径或目录路径；返回最合适的视频文件路径。
@@ -29,12 +33,38 @@ func PickMediaTarget(savePath string) (string, error) {
 // 副作用：会调用外部命令。
 func ExtractMediaInfo(targetFile string) (string, error) {
 	if output, err := runCommandCaptureWithEnv("mediainfo", "PTNEXUS_MEDIAINFO_PATH", targetFile); err == nil && strings.TrimSpace(output) != "" {
-		return output, nil
+		return NormalizeMediaInfoCompleteName(output), nil
 	}
 	if output, err := runCommandCaptureWithEnv("ffprobe", "PTNEXUS_FFPROBE_PATH", "-hide_banner", "-i", targetFile); err == nil && strings.TrimSpace(output) != "" {
-		return output, nil
+		return NormalizeMediaInfoCompleteName(output), nil
 	}
 	return "", fmt.Errorf("无法提取媒体信息，请确认系统已安装 mediainfo 或 ffprobe")
+}
+
+// NormalizeMediaInfoCompleteName strips paths from MediaInfo Complete name lines.
+// It returns the original text when the line is absent or cannot be normalized.
+func NormalizeMediaInfoCompleteName(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		matches := reMediaInfoCompleteNameLine.FindStringSubmatch(line)
+		if len(matches) != 4 {
+			continue
+		}
+		value := strings.TrimSpace(matches[2])
+		if value == "" {
+			continue
+		}
+		normalizedPath := strings.ReplaceAll(value, "\\", "/")
+		base := strings.TrimSpace(path.Base(normalizedPath))
+		if base == "" || base == "." || base == "/" {
+			continue
+		}
+		lines[i] = matches[1] + base + matches[3]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func runCommandCaptureWithEnv(defaultName string, envKey string, args ...string) (string, error) {
